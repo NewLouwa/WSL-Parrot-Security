@@ -43,17 +43,11 @@ if [ "$USERNAME" = "root" ]; then
     exit 1
 fi
 
-# =============================================================================
-# CREATE USER
-# =============================================================================
-
-if id "$USERNAME" &>/dev/null; then
-    log "User '$USERNAME' already exists, skipping creation"
-else
-    log "Creating user '$USERNAME'..."
-    useradd -m -s /bin/bash "$USERNAME"
-    log "Set a password for '$USERNAME':"
-    passwd "$USERNAME"
+# WSL already created the user on first boot -- just validate it exists
+if ! id "$USERNAME" &>/dev/null; then
+    err "User '$USERNAME' not found."
+    err "WSL should have created it on first boot. Did you type the right username?"
+    exit 1
 fi
 
 # Add to sudo/wheel groups
@@ -550,7 +544,11 @@ else
 fi
 
 echo ""
-echo "  ${YELLOW}Restart WSL now:${NC}"
-echo "    PowerShell: ${CYAN}wsl --shutdown${NC}"
-echo "    Then reopen your Parrot WSL terminal"
+echo "  ${YELLOW}⚠  WSL restart required — aliases won't work until you do this:${NC}"
+echo ""
+echo "    1. Open PowerShell and run:  ${CYAN}wsl --shutdown${NC}"
+echo "    2. Reopen your Parrot WSL terminal"
+echo ""
+echo "  ${RED}source ~/.bashrc is NOT enough.${NC} WSL needs a full restart"
+echo "  because wsl.conf (auto-login as $USERNAME) only applies on fresh boot."
 echo ""
