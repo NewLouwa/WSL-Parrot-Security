@@ -48,6 +48,14 @@ fi
 # shellcheck source=toolkit.conf
 source "$SCRIPT_DIR/toolkit.conf"
 
+# Test mode override: if toolkit.test.conf exists, source it after toolkit.conf.
+# It overrides arrays/flags so you can re-run only specific tools without a full install.
+# toolkit.test.conf is in .gitignore -- never committed.
+if [ -f "$SCRIPT_DIR/toolkit.test.conf" ]; then
+    warn "TEST MODE: sourcing toolkit.test.conf as override -- this is not a full install"
+    source "$SCRIPT_DIR/toolkit.test.conf"
+fi
+
 # Fix "sudo: unable to resolve host" warning -- happens when /etc/hosts
 # doesn't have an entry for the current hostname. Silent, runs once.
 HOSTNAME_CURRENT=$(hostname 2>/dev/null)
@@ -225,7 +233,11 @@ _show_menu() {
     printf '  Toggle [1-13] or press Enter to start: '
 }
 
-while true; do
+if [ "${TEST_MODE:-false}" = "true" ]; then
+    warn "TEST MODE: skipping menu, all categories ON"
+fi
+
+while [ "${TEST_MODE:-false}" != "true" ]; do
     _show_menu
     read -r MENU_CHOICE
     case "$MENU_CHOICE" in
@@ -425,6 +437,24 @@ if ! pip3 show ghunt > /dev/null 2>&1; then
     pip_install ghunt
 fi
 
+if [ "${INSTALL_SPIDERFOOT:-true}" = "true" ]; then
+    log "Installing spiderfoot (OSINT framework)..."
+    # No PyPI package -- git clone is the only real option
+    if [ ! -d "$TOOLS_DIR/spiderfoot" ]; then
+        git clone --depth 1 https://github.com/smicallef/spiderfoot.git "$TOOLS_DIR/spiderfoot" 2>/dev/null
+        if [ -d "$TOOLS_DIR/spiderfoot" ]; then
+            pip3 install -r "$TOOLS_DIR/spiderfoot/requirements.txt" --break-system-packages > /dev/null 2>&1 || true
+            ln -sf "$TOOLS_DIR/spiderfoot/sf.py" /usr/local/bin/spiderfoot
+            chmod +x "$TOOLS_DIR/spiderfoot/sf.py" 2>/dev/null
+            INSTALLED+=("spiderfoot")
+        else
+            FAILED+=("spiderfoot")
+        fi
+    else
+        SKIPPED+=("spiderfoot")
+    fi
+fi
+
 if [ "${INSTALL_PHOTON:-true}" = "true" ]; then
     log "Installing Photon (web crawler)..."
     if [ ! -d "$TOOLS_DIR/photon" ]; then
@@ -456,19 +486,32 @@ for pkg in "${SCAN_APT[@]}"; do
 done
 
 if [ "${INSTALL_RUSTSCAN:-true}" = "true" ]; then
-    # rustscan -- not in Parrot repos, grab .deb from GitHub
     if ! command -v rustscan &> /dev/null; then
-        log "Downloading rustscan..."
-        RUSTSCAN_URL=$(curl -s https://api.github.com/repos/RustScan/RustScan/releases/latest \
-            | jq -r '.assets[].browser_download_url' 2>/dev/null | grep "amd64.deb" | head -1)
-        if [ -n "$RUSTSCAN_URL" ] && [ "$RUSTSCAN_URL" != "null" ]; then
-            wget -q -O /tmp/rustscan.deb "$RUSTSCAN_URL" 2>/dev/null
-            dpkg -i /tmp/rustscan.deb > /dev/null 2>&1 || apt-get install -f -y > /dev/null 2>&1
-            rm -f /tmp/rustscan.deb
-            command -v rustscan &>/dev/null && INSTALLED+=("rustscan") || FAILED+=("rustscan")
+        log "Installing rustscan..."
+        # Try apt first (Parrot may have it)
+        if apt-get install -y rustscan > /dev/null 2>&1; then
+            INSTALLED+=("rustscan")
         else
-            warn "Could not fetch rustscan release URL"
-            FAILED+=("rustscan")
+            # GitHub API -- may fail if rate-limited during a long install session
+            RUSTSCAN_URL=$(curl -s --max-time 10 https://api.github.com/repos/RustScan/RustScan/releases/latest \
+                | jq -r '.assets[].browser_download_url' 2>/dev/null | grep "amd64.deb" | head -1)
+            if [ -n "$RUSTSCAN_URL" ] && [ "$RUSTSCAN_URL" != "null" ]; then
+                wget -q -O /tmp/rustscan.deb "$RUSTSCAN_URL" 2>/dev/null
+                dpkg -i /tmp/rustscan.deb > /dev/null 2>&1 || apt-get install -f -y > /dev/null 2>&1
+                rm -f /tmp/rustscan.deb
+                command -v rustscan &>/dev/null && INSTALLED+=("rustscan") || {
+                    # Last resort: cargo (slow but reliable)
+                    if command -v cargo &>/dev/null; then
+                        cargo install rustscan > /dev/null 2>&1 && INSTALLED+=("rustscan") || FAILED+=("rustscan")
+                    else
+                        warn "rustscan: GitHub rate-limited and cargo not available. Install manually: cargo install rustscan"
+                        FAILED+=("rustscan")
+                    fi
+                }
+            else
+                warn "rustscan: GitHub API rate-limited. Install manually: cargo install rustscan"
+                FAILED+=("rustscan")
+            fi
         fi
     else
         SKIPPED+=("rustscan")
@@ -581,6 +624,45 @@ done
 for pkg in "${EXPLOIT_PIP[@]}"; do
     pip_install "$pkg"
 done
+
+if [ "${INSTALL_NETEXEC:-true}" = "true" ]; then
+    log "Installing netexec (CrackMapExec successor)..."
+    # Try apt first -- it's in Debian repos
+    if apt-get install -y netexec > /dev/null 2>&1; then
+        INSTALLED+=("netexec")
+    elif pip3 install netexec --break-system-packages > /dev/null 2>&1; then
+        INSTALLED+=("netexec")
+    elif command -v pipx &>/dev/null || apt-get install -y pipx > /dev/null 2>&1; then
+        pipx install "git+https://github.com/Pennyw0rth/NetExec" > /dev/null 2>&1 \
+            && INSTALLED+=("netexec") || FAILED+=("netexec")
+    else
+        FAILED+=("netexec")
+    fi
+fi
+
+if [ "${INSTALL_PWNCAT:-true}" = "true" ]; then
+    log "Installing pwncat-cs..."
+    if pip3 install pwncat-cs --break-system-packages > /dev/null 2>&1; then
+        INSTALLED+=("pwncat-cs")
+    elif pip3 install pwncat-cs --break-system-packages --no-build-isolation > /dev/null 2>&1; then
+        INSTALLED+=("pwncat-cs")
+    else
+        FAILED+=("pwncat-cs")
+    fi
+fi
+
+if [ "${INSTALL_CERTIPY:-true}" = "true" ]; then
+    log "Installing certipy-ad..."
+    if pip3 install certipy-ad --break-system-packages > /dev/null 2>&1; then
+        INSTALLED+=("certipy-ad")
+    elif pip3 install certipy-ad --break-system-packages --no-build-isolation > /dev/null 2>&1; then
+        INSTALLED+=("certipy-ad")
+    elif pip3 install "git+https://github.com/ly4k/Certipy" --break-system-packages > /dev/null 2>&1; then
+        INSTALLED+=("certipy-ad")
+    else
+        FAILED+=("certipy-ad")
+    fi
+fi
 
 if [ "${INSTALL_IMPACKET:-true}" = "true" ]; then
     # impacket -- try apt package first (more stable on Parrot 13), pip as fallback
@@ -753,6 +835,19 @@ done
 for pkg in "${FORENSICS_PIP[@]}"; do
     pip_install "$pkg"
 done
+
+if [ "${INSTALL_STEGOVERITAS:-true}" = "true" ]; then
+    log "Installing stegoveritas..."
+    # Needs libmagic + image libs first
+    apt-get install -y libmagic1 python3-magic > /dev/null 2>&1 || true
+    if pip3 install stegoveritas --break-system-packages > /dev/null 2>&1; then
+        # Run the post-install dep script -- downloads extra tools
+        stegoveritas_install_deps > /dev/null 2>&1 || true
+        INSTALLED+=("stegoveritas")
+    else
+        FAILED+=("stegoveritas")
+    fi
+fi
 
 if [ "${INSTALL_STEGSEEK:-true}" = "true" ]; then
     log "Installing stegseek..."

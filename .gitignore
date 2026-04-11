@@ -26,3 +26,6 @@ secrets*
 
 # Workspace data (local to each machine)
 workspace/
+
+# Local test config -- never commit this
+toolkit.test.conf
