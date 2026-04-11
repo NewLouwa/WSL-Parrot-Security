@@ -1,5 +1,7 @@
 # AI Disclosure
 
+> **Skip the philosophy?** [Jump straight to how to use AI without screwing yourself over](#how-to-actually-use-ai-while-learning-without-screwing-yourself-over)
+
 This project was built with the help of [Claude Code](https://claude.ai) (Anthropic's AI coding assistant).
 
 What would have taken me weeks of scripting, testing, writing 90+ tool docs, and debugging bash edge cases took about a night. I'm not going to pretend otherwise — AI made this possible at this speed.

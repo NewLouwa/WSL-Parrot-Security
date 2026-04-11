@@ -28,6 +28,8 @@ Complete reference guide for the Parrot WSL Security Toolkit. Covers installatio
 - [Browser Bookmarks](#browser-bookmarks)
 - [Per-Project Command History](#per-project-command-history)
 - [Troubleshooting](#troubleshooting)
+- [Linux Filesystem Reference](#linux-filesystem-reference)
+- [Windows Filesystem Reference](#windows-filesystem-reference)
 
 ---
 
@@ -86,6 +88,26 @@ grep -E "\[!\]|\[-\]" /var/log/parrot-toolkit-install.log
 ```
 
 The summary at the end of the install also lists every package that failed so you know exactly what to fix manually.
+
+### Windows Desktop Shortcut
+
+The installer creates a `Parrot HTB Toolkit.bat` shortcut on your Windows Desktop automatically — this happens at the very start of the install, before anything else, so it's there even if the rest fails halfway.
+
+Double-click it from Windows to open WSL directly. It'll use Windows Terminal if you have it installed, plain WSL otherwise.
+
+### WSL Start Directory
+
+By default, opening WSL from Windows drops you into `/mnt/c/Users/YourName` — your Windows profile mounted in Linux. Not useful.
+
+The installer patches `/root/.bashrc` with:
+
+```bash
+[[ "$PWD" == /mnt/* ]] && cd ~
+```
+
+Every time a bash session opens, if it landed on a Windows mount path, it jumps to home. Silent, automatic, done.
+
+After you run `setup-user.sh` to create your regular user, the same fix is applied to that user's `.bashrc` too.
 
 ### What Gets Installed Where
 
@@ -788,17 +810,6 @@ sudo -l
 whoami /priv
 ```
 
-### 7. Capture Flags
-```bash
-# Linux
-cat /home/*/user.txt
-cat /root/root.txt
-
-# Windows
-type C:\Users\*\Desktop\user.txt
-type C:\Users\Administrator\Desktop\root.txt
-```
-
 ---
 
 ## Workspace Setup
@@ -1080,3 +1091,174 @@ searchsploit <service> <version>
 - [CyberChef](https://gchq.github.io/CyberChef/) — Data encoding/decoding
 - [RevShells](https://www.revshells.com/) — Reverse shell generator
 - [Parrot OS Docs](https://www.parrotsec.org/docs/) — Official Parrot documentation
+
+---
+
+## Linux Filesystem Reference
+
+Quick reminder of what lives where. Useful when you land on a box and need to know where to look.
+
+### The Full Map
+
+| Directory | What it's for |
+|-----------|---------------|
+| `/` | Root of everything. The top. All paths start here. |
+| `/root` | Home directory for the root user. First place to check for flags on a rooted box. |
+| `/home` | Home directories for regular users. `/home/username/` — check here for user flags and SSH keys. |
+| `/etc` | System-wide config files. Passwords (`/etc/passwd`, `/etc/shadow`), cron jobs, SSH config, service configs. Gold mine for enumeration. |
+| `/var` | Variable data — stuff that changes while the system runs. Logs in `/var/log/`, mail in `/var/mail/`, web files often in `/var/www/`. |
+| `/tmp` | Temporary files. World-writable by default, no persistence on reboot. Classic spot to drop payloads and scripts. |
+| `/opt` | Optional/third-party software. Non-standard tools installed by admins often live here. Worth checking. |
+| `/usr` | User programs and data. Binaries in `/usr/bin/`, libraries in `/usr/lib/`, local installs in `/usr/local/`. |
+| `/bin` | Essential system binaries available to all users (ls, cat, bash, etc.). |
+| `/sbin` | System binaries, mostly root-only (ifconfig, iptables, etc.). |
+| `/lib` | Shared libraries needed by `/bin` and `/sbin`. |
+| `/dev` | Device files. Everything is a file in Linux — disks, terminals, `/dev/null`, `/dev/random`. |
+| `/proc` | Virtual filesystem — live info about running processes and the kernel. `/proc/1/` is PID 1. `/proc/net/` has network info. |
+| `/sys` | Virtual filesystem for kernel and hardware info. Less useful in CTFs but good to know. |
+| `/mnt` | Mount point for manually mounted drives. In WSL, your Windows drives are at `/mnt/c/`, `/mnt/d/`, etc. |
+| `/media` | Mount point for removable media (USB drives, CD-ROMs). Rarely relevant on servers. |
+| `/srv` | Data served by the system — FTP, HTTP, etc. Check if the box is running a web or file server. |
+| `/run` | Runtime data since last boot. PIDs, sockets, locks. |
+| `/boot` | Bootloader and kernel files. Usually not interesting unless you're doing kernel work. |
+
+### The HTB-Relevant Ones
+
+These are the directories you'll actually care about on a box:
+
+```
+/etc/passwd          — list of all users (readable by everyone)
+/etc/shadow          — hashed passwords (root only — if you can read this, you're basically done)
+/etc/crontab         — scheduled tasks (privesc vector)
+/etc/sudoers         — who can run what as sudo (privesc vector)
+/etc/hosts           — local DNS entries (useful for pivoting)
+/etc/ssh/            — SSH config and sometimes keys
+/var/log/            — logs — auth.log, syslog, apache/nginx access logs
+/var/www/html/       — default web root for Apache/Nginx
+/var/mail/           — user mailboxes (sometimes has creds or flags)
+/tmp/ and /dev/shm/  — writable by everyone, good for dropping files
+/opt/                — custom software, often misconfigured
+/home/*/.ssh/        — SSH keys, authorized_keys
+/home/*/.bash_history — command history (people type passwords by accident all the time)
+/root/.ssh/          — root's SSH keys
+/root/.bash_history  — root's command history
+```
+
+### File Permissions Quick Reference
+
+```
+-rwxr-xr-x  1 root root  → owner: read/write/execute | group: read/execute | others: read/execute
+drwxrwxrwt  → d = directory, t = sticky bit (only owner can delete files inside — like /tmp)
+-rwsr-xr-x  → s = SUID bit (runs as file owner, not the user running it — huge privesc vector)
+```
+
+```bash
+# Find SUID binaries (classic privesc check)
+find / -perm -4000 -type f 2>/dev/null
+
+# Find world-writable directories
+find / -writable -type d 2>/dev/null
+
+# Find files owned by root that are writable
+find / -user root -writable 2>/dev/null | grep -v proc
+```
+
+### How to Find a File on Linux
+
+```bash
+# Find by name (searches the whole filesystem)
+find / -name "filename.txt" 2>/dev/null
+
+# Find by name, case-insensitive
+find / -iname "filename.txt" 2>/dev/null
+
+# Find only in a specific directory
+find /home -name "*.conf" 2>/dev/null
+
+# Find by extension
+find / -name "*.log" 2>/dev/null
+
+# Find files modified in the last 10 minutes (useful after you drop something)
+find / -mmin -10 -type f 2>/dev/null
+
+# Locate (faster but uses a cached index — may be outdated)
+locate filename.txt
+updatedb  # refresh the index (run as root)
+
+# Find where a command lives
+which python3
+which bash
+
+# Find all versions of a command in PATH
+whereis python
+```
+
+> `2>/dev/null` silences "Permission denied" errors so you only see results you can actually access.
+
+---
+
+## Windows Filesystem Reference
+
+Windows doesn't have one root `/` — it has drive letters (`C:\`, `D:\`, etc.). `C:\` is almost always the system drive.
+
+### The Full Map
+
+| Path | What it's for |
+|------|---------------|
+| `C:\` | System drive root. Everything important lives here. |
+| `C:\Windows\` | The OS itself. System files, DLLs, drivers. |
+| `C:\Windows\System32\` | Core system executables and libraries. Where most built-in tools live (`cmd.exe`, `powershell.exe`, etc.). |
+| `C:\Windows\SysWOW64\` | 32-bit versions of System32 libraries on 64-bit systems. |
+| `C:\Windows\Temp\` | System temp files. World-writable, good for dropping payloads. |
+| `C:\Program Files\` | Installed 64-bit applications. |
+| `C:\Program Files (x86)\` | Installed 32-bit applications. |
+| `C:\Users\` | Home directories for all users — one folder per user. |
+| `C:\Users\username\Desktop\` | User's desktop. Flags often land here on HTB. |
+| `C:\Users\username\Documents\` | User documents. Worth checking for creds and notes. |
+| `C:\Users\username\AppData\` | Hidden folder with app data. Three subfolders: `Local`, `LocalLow`, `Roaming`. Config files, saved sessions, sometimes creds. |
+| `C:\Users\Public\` | Shared between all users. No special permissions needed. |
+| `C:\Users\Administrator\` | Admin home. Check Desktop for root flag on HTB. |
+| `C:\ProgramData\` | App data shared across users (hidden by default). Often has config files with creds. |
+| `C:\Temp\` | Sometimes exists as an extra temp directory. Worth checking. |
+
+### The HTB-Relevant Ones
+
+```
+C:\Users\*\Desktop\             — flags, shortcuts, sometimes sensitive files
+C:\Users\*\AppData\Roaming\     — browser data, saved sessions, app configs
+C:\Users\*\AppData\Local\Temp\  — temp files, sometimes dropped payloads
+C:\Windows\System32\config\     — SAM database (password hashes) — locked while Windows runs
+C:\Windows\Temp\                — world-writable, good for staging
+C:\inetpub\wwwroot\             — IIS web root (like /var/www/html on Linux)
+C:\xampp\htdocs\                — XAMPP web root if the box runs XAMPP
+C:\ProgramData\                 — app configs, sometimes unattended install files with creds
+C:\unattend.xml                 — leftover from Windows installs, sometimes has plaintext creds
+C:\Windows\System32\drivers\etc\hosts — Windows hosts file (same as /etc/hosts on Linux)
+```
+
+### How to Find a File on Windows
+
+```cmd
+:: CMD — search from C:\ root
+dir /s /b C:\filename.txt
+
+:: Search by extension
+dir /s /b C:\*.config
+
+:: Find files containing a string (like grep)
+findstr /s /i "password" C:\*.txt
+findstr /s /i "password" C:\*.xml
+findstr /s /i "password" C:\*.config
+```
+
+```powershell
+# PowerShell — more powerful
+Get-ChildItem -Path C:\ -Recurse -Filter "filename.txt" -ErrorAction SilentlyContinue
+
+# Search file contents for a string
+Select-String -Path "C:\*.txt" -Pattern "password" -Recurse
+
+# Find recently modified files
+Get-ChildItem -Path C:\ -Recurse -ErrorAction SilentlyContinue |
+    Where-Object { $_.LastWriteTime -gt (Get-Date).AddMinutes(-10) }
+```
