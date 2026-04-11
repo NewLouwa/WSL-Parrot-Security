@@ -30,6 +30,7 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOOLS_DIR="/opt/htb-toolkit"
 mkdir -p "$TOOLS_DIR"
 
@@ -89,7 +90,7 @@ pip_install() {
     log "Installing $pkg (pip)..."
     if pip3 install "$pkg" --break-system-packages > /dev/null 2>&1; then
         INSTALLED+=("$pkg")
-    elif pip3 install "$pkg" > /dev/null 2>&1; then
+    elif pip3 install "$pkg" --break-system-packages --ignore-installed > /dev/null 2>&1; then
         INSTALLED+=("$pkg")
     else
         warn "Failed to install $pkg via pip"
@@ -344,7 +345,7 @@ log "Recon — figure out who you're dealing with before you knock."
 safe_install nmap
 safe_install masscan
 safe_install recon-ng
-safe_install theharvester
+pip_install theHarvester
 safe_install amass
 safe_install dnsrecon
 safe_install dnsenum
@@ -390,13 +391,29 @@ safe_install snmp
 safe_install onesixtyone
 safe_install nbtscan
 safe_install ldap-utils
-safe_install rpcclient
+safe_install samba-common-bin    # provides rpcclient
 safe_install gobuster
 safe_install feroxbuster
 safe_install dirb
 safe_install nikto
 safe_install whatweb
-safe_install rustscan
+# rustscan — not in Parrot repos, grab .deb from GitHub
+if ! command -v rustscan &> /dev/null; then
+    log "Downloading rustscan..."
+    RUSTSCAN_URL=$(curl -s https://api.github.com/repos/RustScan/RustScan/releases/latest \
+        | jq -r '.assets[].browser_download_url' 2>/dev/null | grep "amd64.deb" | head -1)
+    if [ -n "$RUSTSCAN_URL" ] && [ "$RUSTSCAN_URL" != "null" ]; then
+        wget -q -O /tmp/rustscan.deb "$RUSTSCAN_URL" 2>/dev/null
+        dpkg -i /tmp/rustscan.deb > /dev/null 2>&1 || apt-get install -f -y > /dev/null 2>&1
+        rm -f /tmp/rustscan.deb
+        command -v rustscan &>/dev/null && INSTALLED+=("rustscan") || FAILED+=("rustscan")
+    else
+        warn "Could not fetch rustscan release URL"
+        FAILED+=("rustscan")
+    fi
+else
+    SKIPPED+=("rustscan")
+fi
 
 if ! command -v ffuf &> /dev/null; then
     go_install ffuf "github.com/ffuf/ffuf/v2@latest"
@@ -407,7 +424,8 @@ section "PHASE 3: VULNERABILITY ANALYSIS"
 # =============================================================================
 log "Finding the weak spots. CVEs are just features with documentation."
 safe_install exploitdb
-safe_install legion
+# legion — not in Parrot repos, manual install: https://github.com/GoVanguard/legion
+warn "legion not available in Parrot repos — install manually from https://github.com/GoVanguard/legion"
 safe_install lynis
 
 # =============================================================================
@@ -471,12 +489,17 @@ section "PHASE 5: EXPLOITATION"
 # =============================================================================
 log "The part people write scary articles about. Authorized targets only."
 safe_install metasploit-framework
-safe_install crackmapexec
+# crackmapexec is deprecated — netexec is the successor (installed via pip below)
 safe_install evil-winrm
 safe_install responder
 safe_install swaks
 
-pip_install impacket
+# impacket — try apt package first (more stable on Parrot 13), pip as fallback
+if apt-get install -y python3-impacket > /dev/null 2>&1; then
+    INSTALLED+=("impacket")
+else
+    pip_install impacket
+fi
 pip_install netexec
 pip_install pwncat-cs
 pip_install certipy-ad
@@ -624,7 +647,7 @@ pip_install stegoveritas
 # Stegseek — fast steghide cracker
 log "Installing stegseek..."
 if ! command -v stegseek &> /dev/null; then
-    STEGSEEK_DEB=$(curl -s https://api.github.com/repos/RickdeJager/stegseek/releases/latest | jq -r '.assets[] | select(.name | endswith("amd64.deb")) | .browser_download_url' 2>/dev/null)
+    STEGSEEK_DEB=$(curl -s https://api.github.com/repos/RickdeJager/stegseek/releases/latest | jq -r '.assets[].browser_download_url' 2>/dev/null | grep "\.deb$" | head -1)
     if [ -n "$STEGSEEK_DEB" ] && [ "$STEGSEEK_DEB" != "null" ]; then
         wget -q -O /tmp/stegseek.deb "$STEGSEEK_DEB" 2>/dev/null
         dpkg -i /tmp/stegseek.deb > /dev/null 2>&1 || apt-get install -f -y > /dev/null 2>&1
@@ -669,7 +692,7 @@ safe_install tree
 safe_install ftp
 safe_install telnet
 safe_install redis-tools
-safe_install mysql-client
+safe_install default-mysql-client   # renamed in Debian 13
 safe_install postgresql-client
 safe_install openvpn         # For HTB VPN
 safe_install remmina          # GUI RDP/VNC client
@@ -863,7 +886,6 @@ if [ ! -f /etc/.parrot-toolkit-user-setup ]; then
     if [[ "$RUN_SETUP" =~ ^[Yy] ]]; then
         read -rp "  Enter your desired username: " SETUP_USERNAME
         if [ -n "$SETUP_USERNAME" ]; then
-            SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
             if [ -f "$SCRIPT_DIR/wsl-config/setup-user.sh" ]; then
                 bash "$SCRIPT_DIR/wsl-config/setup-user.sh" "$SETUP_USERNAME"
             else
