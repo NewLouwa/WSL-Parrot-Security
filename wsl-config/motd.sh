@@ -38,6 +38,13 @@ echo "  ${GREEN}serve${NC}                       HTTP server for file transfer"
 echo "  ${GREEN}rsh${NC} 4444                    Reverse shell listener"
 echo "  ${GREEN}myip${NC}                        Show your HTB VPN IP"
 echo "  ${GREEN}cheat${NC} toolname              Show tool cheat sheet (cheat nmap)"
+if [ -f /etc/.parrot-toolkit-gui-installed ]; then
+echo ""
+echo "  ${BOLD}GUI${NC}"
+echo "  ${GREEN}start-desktop${NC}               Launch XFCE4 desktop (WSLg or XRDP)"
+echo "  ${GREEN}start-desktop xrdp${NC}          Force XRDP — then mstsc /v:localhost:3390"
+echo "  ${GREEN}fix-wsl-gui${NC}                 Fix display issues"
+fi
 echo ""
 echo "  ${BOLD}Navigation${NC}"
 echo "  ${GREEN}ws${NC}  workspace  ${GREEN}htb${NC}  htb folder  ${GREEN}machines${NC}  machines folder"

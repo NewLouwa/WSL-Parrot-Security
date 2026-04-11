@@ -375,6 +375,7 @@ WAYLAND_DISPLAY=wayland-0
 PULSE_SERVER=unix:/mnt/wslg/PulseServer
 ENVEOF
 
+touch /etc/.parrot-toolkit-gui-installed
 log "GUI desktop setup complete!"
 log "  -> Individual GUI apps work via WSLg automatically"
 log "  -> Full desktop: run 'start-desktop' (auto-detects best method)"
@@ -1116,11 +1117,13 @@ printf '\n%sExtra tools downloaded to: %s%s\n' "$GREEN" "$TOOLS_DIR" "$NC"
 printf '%sFull install log: %s%s\n' "$GREEN" "$LOG_FILE" "$NC"
 printf '%sWordlists at: /usr/share/seclists and /usr/share/wordlists%s\n' "$GREEN" "$NC"
 
-printf '\n%s%s=== GUI QUICK START ===%s\n' "$CYAN" "$BOLD" "$NC"
-printf '%s  Individual GUI apps (Wireshark, Ghidra, etc):%s just run them -- WSLg handles display\n' "$GREEN" "$NC"
-printf '%s  Full desktop environment:%s run '\''start-desktop'\''\n' "$GREEN" "$NC"
-printf '%s  XRDP remote desktop:%s run '\''start-desktop xrdp'\'' then connect via mstsc /v:localhost:3390\n' "$GREEN" "$NC"
-printf '%s  Fix GUI issues:%s run '\''fix-wsl-gui'\''\n' "$GREEN" "$NC"
+if [ -f /etc/.parrot-toolkit-gui-installed ]; then
+    printf '\n%s%s=== GUI QUICK START ===%s\n' "$CYAN" "$BOLD" "$NC"
+    printf '%s  Individual GUI apps (Wireshark, Ghidra, etc):%s just run them -- WSLg handles display\n' "$GREEN" "$NC"
+    printf '%s  Full desktop environment:%s run '\''start-desktop'\''\n' "$GREEN" "$NC"
+    printf '%s  XRDP remote desktop:%s run '\''start-desktop xrdp'\'' then connect via mstsc /v:localhost:3390\n' "$GREEN" "$NC"
+    printf '%s  Fix GUI issues:%s run '\''fix-wsl-gui'\''\n' "$GREEN" "$NC"
+fi
 
 # Check if user setup has been done
 if [ ! -f /etc/.parrot-toolkit-user-setup ]; then
@@ -1132,19 +1135,16 @@ if [ ! -f /etc/.parrot-toolkit-user-setup ]; then
     read -rp "  Would you like to run user setup now? [Y/n] " RUN_SETUP
     RUN_SETUP="${RUN_SETUP:-y}"
     if [[ "$RUN_SETUP" =~ ^[Yy] ]]; then
-        read -rp "  Enter your desired username: " SETUP_USERNAME
-        if [ -n "$SETUP_USERNAME" ]; then
-            if [ -f "$SCRIPT_DIR/wsl-config/setup-user.sh" ]; then
-                bash "$SCRIPT_DIR/wsl-config/setup-user.sh" "$SETUP_USERNAME"
-            else
-                warn "setup-user.sh not found. Run it manually:"
-                echo "    sudo bash wsl-config/setup-user.sh $SETUP_USERNAME"
-            fi
+        if [ -f "$SCRIPT_DIR/wsl-config/setup-user.sh" ]; then
+            bash "$SCRIPT_DIR/wsl-config/setup-user.sh"
+        else
+            warn "setup-user.sh not found. Run it manually:"
+            echo "    sudo bash wsl-config/setup-user.sh"
         fi
     else
         echo ""
         printf '  %sRun it later with:%s\n' "$GREEN" "$NC"
-        printf '    %ssudo bash wsl-config/setup-user.sh <your-username>%s\n' "$CYAN" "$NC"
+        printf '    %ssudo bash wsl-config/setup-user.sh%s\n' "$CYAN" "$NC"
     fi
 else
     echo ""

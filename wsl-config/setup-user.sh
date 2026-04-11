@@ -21,32 +21,23 @@ warn() { echo "${YELLOW}[!]${NC} $1"; }
 err()  { echo "${RED}[-]${NC} $1"; }
 
 if [ "$EUID" -ne 0 ]; then
-    err "Run as root: sudo bash setup-user.sh <username>"
+    err "Run as root: sudo bash setup-user.sh"
     exit 1
 fi
 
-USERNAME="${1}"
+# Auto-detect the real user -- WSL already created them on first boot
+# $SUDO_USER is set when running via sudo, fall back to the arg if provided
+USERNAME="${1:-$SUDO_USER}"
 
-if [ -z "$USERNAME" ]; then
-    err "Usage: sudo bash setup-user.sh <username>"
-    err "Example: sudo bash setup-user.sh parrot"
+if [ -z "$USERNAME" ] || [ "$USERNAME" = "root" ]; then
+    err "Could not detect your username automatically."
+    err "Pass it manually: sudo bash setup-user.sh <your-username>"
     exit 1
 fi
 
-if ! [[ "$USERNAME" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
-    err "Invalid username. Use lowercase letters, numbers, underscore, or dash."
-    exit 1
-fi
-
-if [ "$USERNAME" = "root" ]; then
-    err "Use a non-root username. The point is to not run as root."
-    exit 1
-fi
-
-# WSL already created the user on first boot -- just validate it exists
 if ! id "$USERNAME" &>/dev/null; then
-    err "User '$USERNAME' not found."
-    err "WSL should have created it on first boot. Did you type the right username?"
+    err "User '$USERNAME' not found. WSL should have created it on first boot."
+    err "Pass it manually: sudo bash setup-user.sh <your-username>"
     exit 1
 fi
 
