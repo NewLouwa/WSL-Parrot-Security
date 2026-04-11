@@ -165,14 +165,25 @@ if [ -n "$SUDO_USER" ]; then
     export PATH="$PATH:/home/$SUDO_USER/go/bin"
 fi
 
+# =============================================================================
+# GUI PROMPT
+# =============================================================================
+echo ""
+printf '%s[?]%s Install full GUI desktop? (XFCE4 + XRDP + Brave + desktop apps)\n' "$CYAN" "$NC"
+printf '    Adds ~2GB and takes longer. Skip if you only want CLI tools.\n'
+printf '    [Y/n] '
+read -r INSTALL_GUI
+INSTALL_GUI="${INSTALL_GUI:-y}"
 
 # =============================================================================
 section "GUI / DESKTOP ENVIRONMENT SETUP"
 # =============================================================================
-# This enables graphical apps in WSL via WSLg and provides a full desktop
-# via XRDP as fallback for a complete GUI experience.
 
-log "Setting up GUI — this part takes a while, go make a coffee."
+if [[ "$INSTALL_GUI" =~ ^[Yy] ]]; then
+
+log "Setting up GUI — this part takes a while. Go make a coffee, or tea if that's your thing."
+log "  While you wait, check out NetworkChuck — actually good content, not clickbait. Well, a little clickbait. Still good."
+log "  YouTube : https://www.youtube.com/@NetworkChuck"
 
 # Core X11 + WSLg support
 log "Installing X11 display server..."
@@ -345,6 +356,11 @@ log "GUI setup complete!"
 log "  -> Individual GUI apps work via WSLg automatically"
 log "  -> Full desktop: run 'start-desktop' (auto-detects best method)"
 log "  -> XRDP manual: run 'start-desktop xrdp' then mstsc /v:localhost:3390"
+
+else
+    warn "Skipping GUI setup — CLI-only install."
+    warn "  Run 'sudo apt install xfce4 xrdp' later if you change your mind."
+fi
 
 # =============================================================================
 section "PHASE 1: RECONNAISSANCE"
