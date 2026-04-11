@@ -6,6 +6,9 @@
 # Organized by pentest phase for HTB training
 #
 # Customize what gets installed: edit toolkit.conf before running
+#
+# If this saved you time, consider buying me a coffee:
+#   https://ko-fi.com/newlouwa
 # =============================================================================
 
 # NOT using set -e -- we want to keep going if individual installs fail,
@@ -217,7 +220,7 @@ _show_menu() {
     printf '  [%s]  [12] Wireless           aircrack-ng, reaver, wifite\n' "$(_cat_status $CAT_WIRELESS)"
     printf '  [%s]  [13] Networking & Utils wireshark, tmux, vim, openvpn, socat\n' "$(_cat_status $CAT_NETWORKING)"
     printf '\n'
-    printf '  %s(KeePassXC always installs -- password manager is non-negotiable.)%s\n' "$YELLOW" "$NC"
+    printf '  %s(KeePassXC installs by default -- disable via INSTALL_KEEPASSXC=false in toolkit.conf)%s\n' "$YELLOW" "$NC"
     printf '\n'
     printf '  Toggle [1-13] or press Enter to start: '
 }
@@ -244,9 +247,14 @@ while true; do
     esac
 done
 
-# KeePassXC: always installed, no questions asked.
-log "Installing KeePassXC (this one's not optional -- you need a password manager)..."
-safe_install keepassxc
+# KeePassXC: installs by default. Can be disabled in toolkit.conf (INSTALL_KEEPASSXC=false).
+if [ "${INSTALL_KEEPASSXC:-true}" = "true" ]; then
+    log "Installing KeePassXC (seriously, you need a password manager)..."
+    safe_install keepassxc
+else
+    warn "KeePassXC skipped (INSTALL_KEEPASSXC=false in toolkit.conf)."
+    warn "  You know what you're doing. Hopefully."
+fi
 
 # =============================================================================
 section "GUI / DESKTOP ENVIRONMENT SETUP"
@@ -778,11 +786,34 @@ section "PHASE 10: WIRELESS (limited in WSL)"
 # =============================================================================
 if [ "$CAT_WIRELESS" -eq 1 ]; then
 
-log "WSL doesn't have raw WiFi access -- installing anyway for when you boot into real hardware."
+warn "  Wireless in WSL is painful. Like, genuinely annoying."
+warn "  WSL doesn't support raw WiFi natively -- no monitor mode, no packet injection."
+warn "  Even with a USB adapter, you need to pass it through via USBIPD-WIN first:"
+warn "    https://learn.microsoft.com/en-us/windows/wsl/connect-usb"
+warn "    https://github.com/dorssel/usbipd-win"
+warn ""
+warn "  And the adapter itself MUST support monitor mode."
+warn "  Most built-in laptop WiFi cards and cheap USB sticks do NOT."
+warn "  The ones that actually work:"
+warn "    Alfa AWUS036ACH  -- dual band, widely supported, the classic choice"
+warn "    Alfa AWUS036NHA  -- 2.4GHz only but rock solid"
+warn "    TP-Link TL-WN722N v1 ONLY -- v2/v3 changed chipset and lost monitor mode"
+warn ""
+warn "  Realistically, for serious wireless testing:"
+warn "  Boot into native Linux or use a VM with USB passthrough."
+warn ""
+printf '%s[?]%s Do you actually need wireless tools right now? [y/N] ' "$CYAN" "$NC"
+read -r INSTALL_WIRELESS_CONFIRM
+INSTALL_WIRELESS_CONFIRM="${INSTALL_WIRELESS_CONFIRM:-n}"
+if [[ "$INSTALL_WIRELESS_CONFIRM" =~ ^[Yy] ]]; then
+    log "Installing wireless tools -- they'll be ready when your setup is."
 
-for pkg in "${WIRELESS_APT[@]}"; do
-    safe_install "$pkg"
-done
+    for pkg in "${WIRELESS_APT[@]}"; do
+        safe_install "$pkg"
+    done
+else
+    warn "Skipping wireless tools. Good call -- come back when you have the right adapter and setup."
+fi # wireless confirm
 
 else
     warn "Skipping Wireless (disabled in menu)"
@@ -1071,3 +1102,6 @@ printf '    If that list isn'\''t empty, you need KeePassXC %stoday%s, not tomor
 echo ""
 
 printf '\n%s%sHappy hacking!%s\n\n' "$CYAN" "$BOLD" "$NC"
+
+printf '%s  If this toolkit saved you time, consider buying me a coffee:%s\n' "$YELLOW" "$NC"
+printf '%s  https://ko-fi.com/newlouwa%s\n\n' "$CYAN" "$NC"
