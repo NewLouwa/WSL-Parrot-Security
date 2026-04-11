@@ -4,9 +4,11 @@
 # Installs tools commonly found in Kali but missing from base Parrot WSL
 # Includes FULL GUI/Desktop Environment support (WSLg + XRDP fallback)
 # Organized by pentest phase for HTB training
+#
+# Customize what gets installed: edit toolkit.conf before running
 # =============================================================================
 
-# NOT using set -e — we want to keep going if individual installs fail,
+# NOT using set -e -- we want to keep going if individual installs fail,
 # and report what broke at the end rather than dying silently mid-install.
 
 LOG_FILE="/var/log/parrot-toolkit-install.log"
@@ -34,7 +36,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOOLS_DIR="/opt/htb-toolkit"
 mkdir -p "$TOOLS_DIR"
 
-# Fix "sudo: unable to resolve host" warning — happens when /etc/hosts
+# Source toolkit.conf -- defines what gets installed in each category
+if [ ! -f "$SCRIPT_DIR/toolkit.conf" ]; then
+    err "toolkit.conf not found in $SCRIPT_DIR"
+    err "This file defines what gets installed. It should be in the repo."
+    exit 1
+fi
+# shellcheck source=toolkit.conf
+source "$SCRIPT_DIR/toolkit.conf"
+
+# Fix "sudo: unable to resolve host" warning -- happens when /etc/hosts
 # doesn't have an entry for the current hostname. Silent, runs once.
 HOSTNAME_CURRENT=$(hostname 2>/dev/null)
 if [ -n "$HOSTNAME_CURRENT" ] && ! grep -q "$HOSTNAME_CURRENT" /etc/hosts 2>/dev/null; then
@@ -46,7 +57,7 @@ fi
 # FIRST THINGS FIRST: Desktop shortcut + start directory fix
 # =============================================================================
 
-# Fix WSL start directory for root — without this WSL lands in /mnt/c/Users/...
+# Fix WSL start directory for root -- without this WSL lands in /mnt/c/Users/...
 # (your Windows profile) instead of /root. This makes it sane immediately.
 if ! grep -q "mnt.*cd ~" /root/.bashrc 2>/dev/null; then
     cat >> /root/.bashrc << 'RCEOF'
@@ -70,7 +81,7 @@ BATEOF
     log "Desktop shortcut created on your Windows Desktop: 'Parrot HTB Toolkit.bat'"
     log "  Double-click it from Windows to launch straight into your toolkit"
 else
-    warn "Could not detect Windows Desktop — shortcut not created"
+    warn "Could not detect Windows Desktop -- shortcut not created"
     warn "  To launch WSL from Windows, just run: wsl"
 fi
 
@@ -131,7 +142,7 @@ apt-get upgrade -y
 
 log "Installing base dependencies..."
 # Install packages individually so one missing package doesn't nuke the whole setup.
-# software-properties-common is Ubuntu-only and doesn't exist in Parrot/Debian — don't add it.
+# software-properties-common is Ubuntu-only and doesn't exist in Parrot/Debian -- skip it.
 BASE_DEPS=(
     git curl wget
     python3 python3-pip python3-dev
@@ -154,7 +165,7 @@ done
 
 if [ ${#BASE_FAILED[@]} -gt 0 ]; then
     warn "Some base deps couldn't be installed: ${BASE_FAILED[*]}"
-    warn "The toolkit will still install everything it can — unlike a vibecoder, it doesn't give up after one error."
+    warn "The toolkit will still install everything it can -- unlike a vibecoder, it doesn't give up after one error."
 else
     log "All base dependencies installed."
 fi
@@ -166,58 +177,95 @@ if [ -n "$SUDO_USER" ]; then
 fi
 
 # =============================================================================
-# GUI PROMPT
+# INSTALLATION MENU
 # =============================================================================
-echo ""
-printf '%s[?]%s Install full GUI desktop? (XFCE4 + XRDP + Brave + desktop apps)\n' "$CYAN" "$NC"
-printf '    Adds ~2GB and takes longer. Skip if you only want CLI tools.\n'
-printf '    [Y/n] '
-read -r INSTALL_GUI
-INSTALL_GUI="${INSTALL_GUI:-y}"
+
+CAT_GUI=1
+CAT_APPS=1
+CAT_RECON=1
+CAT_SCAN=1
+CAT_VULN=1
+CAT_WEB=1
+CAT_EXPLOIT=1
+CAT_PASSWORDS=1
+CAT_POSTEXPLOIT=1
+CAT_REVENG=1
+CAT_FORENSICS=1
+CAT_WIRELESS=1
+CAT_NETWORKING=1
+
+_cat_status() { [ "$1" -eq 1 ] && printf '%s ON %s' "$GREEN" "$NC" || printf '%s OFF%s' "$RED" "$NC"; }
+
+_show_menu() {
+    printf '\033[2J\033[H'
+    printf '%s%s  PARROT HTB TOOLKIT  |  INSTALLATION MENU%s\n' "$CYAN" "$BOLD" "$NC"
+    printf '%s  ===========================================%s\n\n' "$CYAN" "$NC"
+    printf '  All categories are ON by default.\n'
+    printf '  Type a number to toggle, then press Enter to start.\n'
+    printf '  To customize individual tools, edit %stoolkit.conf%s before running.\n\n' "$YELLOW" "$NC"
+    printf '  [%s]  [1]  GUI Desktop        XFCE4 + XRDP + X11 + themes\n' "$(_cat_status $CAT_GUI)"
+    printf '  [%s]  [2]  Desktop Apps       Brave, VLC, Filezilla, Flameshot, LibreOffice\n' "$(_cat_status $CAT_APPS)"
+    printf '  [%s]  [3]  Reconnaissance     nmap, amass, theHarvester, OSINT tools\n' "$(_cat_status $CAT_RECON)"
+    printf '  [%s]  [4]  Scanning & Enum    gobuster, nikto, rustscan, ffuf, SMB tools\n' "$(_cat_status $CAT_SCAN)"
+    printf '  [%s]  [5]  Vuln Analysis      exploitdb, lynis\n' "$(_cat_status $CAT_VULN)"
+    printf '  [%s]  [6]  Web Testing        sqlmap, burpsuite, xsstrike, jwt_tool\n' "$(_cat_status $CAT_WEB)"
+    printf '  [%s]  [7]  Exploitation       metasploit, evil-winrm, impacket, kerbrute\n' "$(_cat_status $CAT_EXPLOIT)"
+    printf '  [%s]  [8]  Password Attacks   john, hashcat, hydra, SecLists, rockyou\n' "$(_cat_status $CAT_PASSWORDS)"
+    printf '  [%s]  [9]  Post-Exploitation  bloodhound, chisel, ligolo-ng, PEAS\n' "$(_cat_status $CAT_POSTEXPLOIT)"
+    printf '  [%s]  [10] Reverse Eng.       ghidra, radare2, gdb, pwntools\n' "$(_cat_status $CAT_REVENG)"
+    printf '  [%s]  [11] Forensics & Stego  foremost, steghide, volatility3, stegseek\n' "$(_cat_status $CAT_FORENSICS)"
+    printf '  [%s]  [12] Wireless           aircrack-ng, reaver, wifite\n' "$(_cat_status $CAT_WIRELESS)"
+    printf '  [%s]  [13] Networking & Utils wireshark, tmux, vim, openvpn, socat\n' "$(_cat_status $CAT_NETWORKING)"
+    printf '\n'
+    printf '  %s(KeePassXC always installs -- password manager is non-negotiable.)%s\n' "$YELLOW" "$NC"
+    printf '\n'
+    printf '  Toggle [1-13] or press Enter to start: '
+}
+
+while true; do
+    _show_menu
+    read -r MENU_CHOICE
+    case "$MENU_CHOICE" in
+        "")  break ;;
+        1)   CAT_GUI=$((1 - CAT_GUI)) ;;
+        2)   CAT_APPS=$((1 - CAT_APPS)) ;;
+        3)   CAT_RECON=$((1 - CAT_RECON)) ;;
+        4)   CAT_SCAN=$((1 - CAT_SCAN)) ;;
+        5)   CAT_VULN=$((1 - CAT_VULN)) ;;
+        6)   CAT_WEB=$((1 - CAT_WEB)) ;;
+        7)   CAT_EXPLOIT=$((1 - CAT_EXPLOIT)) ;;
+        8)   CAT_PASSWORDS=$((1 - CAT_PASSWORDS)) ;;
+        9)   CAT_POSTEXPLOIT=$((1 - CAT_POSTEXPLOIT)) ;;
+        10)  CAT_REVENG=$((1 - CAT_REVENG)) ;;
+        11)  CAT_FORENSICS=$((1 - CAT_FORENSICS)) ;;
+        12)  CAT_WIRELESS=$((1 - CAT_WIRELESS)) ;;
+        13)  CAT_NETWORKING=$((1 - CAT_NETWORKING)) ;;
+        *)   printf '\n  %sInvalid option.%s\n' "$RED" "$NC"; sleep 0.4 ;;
+    esac
+done
+
+# KeePassXC: always installed, no questions asked.
+log "Installing KeePassXC (this one's not optional -- you need a password manager)..."
+safe_install keepassxc
 
 # =============================================================================
 section "GUI / DESKTOP ENVIRONMENT SETUP"
 # =============================================================================
 
-if [[ "$INSTALL_GUI" =~ ^[Yy] ]]; then
+if [ "$CAT_GUI" -eq 1 ]; then
 
-log "Setting up GUI — this part takes a while. Go make a coffee, or tea if that's your thing."
-log "  While you wait, check out NetworkChuck — actually good content, not clickbait. Well, a little clickbait. Still good."
+log "Setting up GUI -- this part takes a while. Go make a coffee, or tea if that's your thing."
+log "  While you wait, check out NetworkChuck -- actually good content, not clickbait. Well, a little clickbait. Still good."
 log "  YouTube : https://www.youtube.com/@NetworkChuck"
 
-# Core X11 + WSLg support
-log "Installing X11 display server..."
-apt-get install -y \
-    xorg \
-    xserver-xorg \
-    x11-apps \
-    x11-utils \
-    x11-xserver-utils \
-    dbus-x11 \
-    xdg-utils \
-    mesa-utils \
-    > /dev/null 2>&1 || warn "Some X11 packages failed"
-log "X11 done."
+log "Installing X11 + XFCE4 desktop environment..."
+for pkg in "${GUI_APT[@]}"; do
+    safe_install "$pkg"
+done
+log "Desktop environment packages done."
 
-# XFCE4 desktop (lightweight, works great in WSL)
-log "Installing XFCE4 desktop... (yes, a full desktop in WSL, yes it works)"
-apt-get install -y \
-    xfce4 \
-    xfce4-goodies \
-    xfce4-terminal \
-    xfce4-whiskermenu-plugin \
-    thunar \
-    mousepad \
-    ristretto \
-    > /dev/null 2>&1 || warn "Some XFCE packages failed"
-log "XFCE4 done."
-
-# XRDP for full remote desktop (connect from Windows via mstsc)
-log "Installing XRDP — because mstsc /v:localhost:3390 is a banger command..."
-apt-get install -y xrdp > /dev/null 2>&1 || warn "XRDP install failed"
-
+# Configure XRDP to use XFCE4
 if command -v xrdp &> /dev/null; then
-    # Configure XRDP to use XFCE4
     cat > /etc/xrdp/startwm.sh << 'XRDPEOF'
 #!/bin/sh
 if [ -r /etc/default/locale ]; then
@@ -238,63 +286,11 @@ XRDPEOF
     log "  -> Connect from Windows: mstsc /v:localhost:3390"
 fi
 
-# Audio support
-log "Installing PulseAudio..."
-apt-get install -y pulseaudio > /dev/null 2>&1 || true
-
-# GTK/QT themes for nice-looking GUI apps
-log "Installing themes and fonts — making it look less like a 2004 Linux distro..."
-apt-get install -y \
-    arc-theme \
-    papirus-icon-theme \
-    fonts-noto \
-    fonts-hack \
-    fonts-liberation \
-    adwaita-icon-theme \
-    gtk2-engines-murrine \
-    qt5ct \
-    > /dev/null 2>&1 || true
-log "Themes done."
-
-# File manager and essential desktop apps
-log "Installing desktop apps (KeePassXC, VLC, Flameshot, Filezilla...)..."
-apt-get install -y \
-    filezilla \
-    keepassxc \
-    flameshot \
-    vlc \
-    evince \
-    libreoffice-calc \
-    gedit \
-    > /dev/null 2>&1 || warn "Some desktop apps failed"
-log "Desktop apps done."
-
-# Brave Browser
-log "Installing Brave browser..."
-if ! command -v brave-browser &> /dev/null; then
-    curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg \
-        https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg 2>/dev/null
-    echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main" \
-        > /etc/apt/sources.list.d/brave-browser-release.list
-    apt-get update -y > /dev/null 2>&1
-    if apt-get install -y brave-browser > /dev/null 2>&1; then
-        INSTALLED+=("brave-browser")
-    else
-        warn "Failed to install Brave browser"
-        FAILED+=("brave-browser")
-    fi
-else
-    SKIPPED+=("brave-browser")
-fi
-
-# Terminal emulators (extra options)
-apt-get install -y terminator > /dev/null 2>&1 || true
-
 # Create a helper script to start the desktop
 cat > /usr/local/bin/start-desktop << 'DESKEOF'
 #!/bin/bash
 # Start Parrot WSL Desktop Environment
-# Usage: start-desktop [xrdp|wslg]
+# Usage: start-desktop [xrdp|wslg|auto]
 
 MODE="${1:-auto}"
 
@@ -340,10 +336,6 @@ esac
 DESKEOF
 chmod +x /usr/local/bin/start-desktop
 
-# Create .desktop launchers for custom tools
-DESKTOP_DIR="/usr/share/applications"
-mkdir -p "$DESKTOP_DIR"
-
 # Configure WSLg environment variables
 cat >> /etc/environment << 'ENVEOF'
 # WSLg / GUI support
@@ -352,145 +344,201 @@ WAYLAND_DISPLAY=wayland-0
 PULSE_SERVER=unix:/mnt/wslg/PulseServer
 ENVEOF
 
-log "GUI setup complete!"
+log "GUI desktop setup complete!"
 log "  -> Individual GUI apps work via WSLg automatically"
 log "  -> Full desktop: run 'start-desktop' (auto-detects best method)"
 log "  -> XRDP manual: run 'start-desktop xrdp' then mstsc /v:localhost:3390"
 
 else
-    warn "Skipping GUI setup — CLI-only install."
-    warn "  Run 'sudo apt install xfce4 xrdp' later if you change your mind."
+    warn "Skipping desktop environment. CLI mode -- respect."
+    warn "  Run 'sudo apt install xfce4 xrdp' whenever you change your mind."
+fi
+
+# =============================================================================
+section "DESKTOP APPS"
+# =============================================================================
+
+if [ "$CAT_APPS" -eq 1 ]; then
+    log "Installing desktop apps..."
+    for pkg in "${APPS_APT[@]}"; do
+        safe_install "$pkg"
+    done
+
+    if [ "${INSTALL_BRAVE:-true}" = "true" ]; then
+        log "Installing Brave browser..."
+        if ! command -v brave-browser &> /dev/null; then
+            curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg \
+                https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg 2>/dev/null
+            echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main" \
+                > /etc/apt/sources.list.d/brave-browser-release.list
+            apt-get update -y > /dev/null 2>&1
+            if apt-get install -y brave-browser > /dev/null 2>&1; then
+                INSTALLED+=("brave-browser")
+            else
+                warn "Failed to install Brave browser"
+                FAILED+=("brave-browser")
+            fi
+        else
+            SKIPPED+=("brave-browser")
+        fi
+    fi
+    log "Desktop apps done."
+else
+    warn "Skipping desktop apps (disabled in menu)."
+fi
+
+if [ "$CAT_GUI" -eq 0 ] && [ "$CAT_APPS" -eq 0 ]; then
+    warn ""
+    warn "  Both GUI and desktop apps disabled. Full CLI setup."
+    warn "  Just know that one day, at 2AM, staring at a box that needs Wireshark,"
+    warn "  you're going to wish you'd left them on. We'll be here."
+    warn ""
+    warn "  Fun fact: the GUI doesn't break CLI. You still get your terminal."
+    warn "  You just also get Burp, Wireshark, a browser -- without leaving WSL."
+    warn "  Best of both worlds. Just saying."
 fi
 
 # =============================================================================
 section "PHASE 1: RECONNAISSANCE"
 # =============================================================================
-log "Recon — figure out who you're dealing with before you knock."
-safe_install nmap
-safe_install masscan
-safe_install recon-ng
-pip_install theHarvester
-safe_install amass
-safe_install dnsrecon
-safe_install dnsenum
-safe_install whois
-safe_install fierce
-safe_install sublist3r
-# maltego requires manual install: https://www.maltego.com/downloads/
+if [ "$CAT_RECON" -eq 1 ]; then
 
-# OSINT tools
-pip_install sherlock-project
-pip_install holehe
-pip_install shodan
-pip_install spiderfoot
+log "Recon -- figure out who you're dealing with before you knock."
 
-# GHunt
-log "Installing GHunt..."
+for pkg in "${RECON_APT[@]}"; do
+    safe_install "$pkg"
+done
+for pkg in "${RECON_PIP[@]}"; do
+    pip_install "$pkg"
+done
+
+# GHunt (may already be in RECON_PIP, safe to double-check)
 if ! pip3 show ghunt > /dev/null 2>&1; then
     pip_install ghunt
 fi
 
-# Photon web crawler
-log "Installing Photon..."
-if [ ! -d "$TOOLS_DIR/photon" ]; then
-    git clone --depth 1 https://github.com/s0md3v/Photon.git "$TOOLS_DIR/photon" 2>/dev/null
-    if [ -d "$TOOLS_DIR/photon" ]; then
-        pip3 install -r "$TOOLS_DIR/photon/requirements.txt" --break-system-packages > /dev/null 2>&1 || true
-        ln -sf "$TOOLS_DIR/photon/photon.py" /usr/local/bin/photon
-        chmod +x "$TOOLS_DIR/photon/photon.py"
-        INSTALLED+=("photon")
-    else
-        FAILED+=("photon")
+if [ "${INSTALL_PHOTON:-true}" = "true" ]; then
+    log "Installing Photon (web crawler)..."
+    if [ ! -d "$TOOLS_DIR/photon" ]; then
+        git clone --depth 1 https://github.com/s0md3v/Photon.git "$TOOLS_DIR/photon" 2>/dev/null
+        if [ -d "$TOOLS_DIR/photon" ]; then
+            pip3 install -r "$TOOLS_DIR/photon/requirements.txt" --break-system-packages > /dev/null 2>&1 || true
+            ln -sf "$TOOLS_DIR/photon/photon.py" /usr/local/bin/photon
+            chmod +x "$TOOLS_DIR/photon/photon.py"
+            INSTALLED+=("photon")
+        else
+            FAILED+=("photon")
+        fi
     fi
 fi
+
+else
+    warn "Skipping Reconnaissance (disabled in menu)"
+fi # CAT_RECON
 
 # =============================================================================
 section "PHASE 2: SCANNING & ENUMERATION"
 # =============================================================================
+if [ "$CAT_SCAN" -eq 1 ]; then
+
 log "Knock on every port, rattle every service, read every banner."
-safe_install enum4linux
-safe_install smbclient
-safe_install smbmap
-safe_install snmp
-safe_install onesixtyone
-safe_install nbtscan
-safe_install ldap-utils
-safe_install samba-common-bin    # provides rpcclient
-safe_install gobuster
-safe_install feroxbuster
-safe_install dirb
-safe_install nikto
-safe_install whatweb
-# rustscan — not in Parrot repos, grab .deb from GitHub
-if ! command -v rustscan &> /dev/null; then
-    log "Downloading rustscan..."
-    RUSTSCAN_URL=$(curl -s https://api.github.com/repos/RustScan/RustScan/releases/latest \
-        | jq -r '.assets[].browser_download_url' 2>/dev/null | grep "amd64.deb" | head -1)
-    if [ -n "$RUSTSCAN_URL" ] && [ "$RUSTSCAN_URL" != "null" ]; then
-        wget -q -O /tmp/rustscan.deb "$RUSTSCAN_URL" 2>/dev/null
-        dpkg -i /tmp/rustscan.deb > /dev/null 2>&1 || apt-get install -f -y > /dev/null 2>&1
-        rm -f /tmp/rustscan.deb
-        command -v rustscan &>/dev/null && INSTALLED+=("rustscan") || FAILED+=("rustscan")
+
+for pkg in "${SCAN_APT[@]}"; do
+    safe_install "$pkg"
+done
+
+if [ "${INSTALL_RUSTSCAN:-true}" = "true" ]; then
+    # rustscan -- not in Parrot repos, grab .deb from GitHub
+    if ! command -v rustscan &> /dev/null; then
+        log "Downloading rustscan..."
+        RUSTSCAN_URL=$(curl -s https://api.github.com/repos/RustScan/RustScan/releases/latest \
+            | jq -r '.assets[].browser_download_url' 2>/dev/null | grep "amd64.deb" | head -1)
+        if [ -n "$RUSTSCAN_URL" ] && [ "$RUSTSCAN_URL" != "null" ]; then
+            wget -q -O /tmp/rustscan.deb "$RUSTSCAN_URL" 2>/dev/null
+            dpkg -i /tmp/rustscan.deb > /dev/null 2>&1 || apt-get install -f -y > /dev/null 2>&1
+            rm -f /tmp/rustscan.deb
+            command -v rustscan &>/dev/null && INSTALLED+=("rustscan") || FAILED+=("rustscan")
+        else
+            warn "Could not fetch rustscan release URL"
+            FAILED+=("rustscan")
+        fi
     else
-        warn "Could not fetch rustscan release URL"
-        FAILED+=("rustscan")
+        SKIPPED+=("rustscan")
     fi
-else
-    SKIPPED+=("rustscan")
 fi
 
-if ! command -v ffuf &> /dev/null; then
-    go_install ffuf "github.com/ffuf/ffuf/v2@latest"
+if [ "${INSTALL_FFUF:-true}" = "true" ]; then
+    if ! command -v ffuf &> /dev/null; then
+        go_install ffuf "github.com/ffuf/ffuf/v2@latest"
+    fi
 fi
+
+else
+    warn "Skipping Scanning & Enumeration (disabled in menu)"
+fi # CAT_SCAN
 
 # =============================================================================
 section "PHASE 3: VULNERABILITY ANALYSIS"
 # =============================================================================
+if [ "$CAT_VULN" -eq 1 ]; then
+
 log "Finding the weak spots. CVEs are just features with documentation."
-safe_install exploitdb
-# legion — not in Parrot repos, manual install: https://github.com/GoVanguard/legion
-warn "legion not available in Parrot repos — install manually from https://github.com/GoVanguard/legion"
-safe_install lynis
+
+for pkg in "${VULN_APT[@]}"; do
+    safe_install "$pkg"
+done
+
+if [ "${INSTALL_LEGION:-false}" = "true" ]; then
+    warn "legion not available in Parrot repos -- install manually from https://github.com/GoVanguard/legion"
+else
+    warn "legion skipped (not in Parrot repos) -- install manually: https://github.com/GoVanguard/legion"
+fi
+
+else
+    warn "Skipping Vulnerability Analysis (disabled in menu)"
+fi # CAT_VULN
 
 # =============================================================================
 section "PHASE 4: WEB APPLICATION TESTING"
 # =============================================================================
-log "Breaking web apps — legally, on purpose, for fun and for flags."
-safe_install sqlmap
-safe_install wfuzz
-safe_install wpscan
-safe_install commix
-safe_install zaproxy     # OWASP ZAP (GUI app)
-safe_install wafw00f
-safe_install burpsuite   # May not be in repos, manual install below
+if [ "$CAT_WEB" -eq 1 ]; then
 
-pip_install xsstrike
+log "Breaking web apps -- legally, on purpose, for fun and for flags."
 
-# jwt_tool
-log "Installing jwt_tool..."
-if [ ! -d "$TOOLS_DIR/jwt_tool" ]; then
-    git clone --depth 1 https://github.com/ticarpi/jwt_tool.git "$TOOLS_DIR/jwt_tool" 2>/dev/null
-    if [ -d "$TOOLS_DIR/jwt_tool" ]; then
-        pip3 install -r "$TOOLS_DIR/jwt_tool/requirements.txt" --break-system-packages > /dev/null 2>&1 || true
-        ln -sf "$TOOLS_DIR/jwt_tool/jwt_tool.py" /usr/local/bin/jwt_tool
-        chmod +x "$TOOLS_DIR/jwt_tool/jwt_tool.py"
-        INSTALLED+=("jwt_tool")
-    else
-        FAILED+=("jwt_tool")
+for pkg in "${WEB_APT[@]}"; do
+    safe_install "$pkg"
+done
+for pkg in "${WEB_PIP[@]}"; do
+    pip_install "$pkg"
+done
+
+if [ "${INSTALL_JWT_TOOL:-true}" = "true" ]; then
+    log "Installing jwt_tool..."
+    if [ ! -d "$TOOLS_DIR/jwt_tool" ]; then
+        git clone --depth 1 https://github.com/ticarpi/jwt_tool.git "$TOOLS_DIR/jwt_tool" 2>/dev/null
+        if [ -d "$TOOLS_DIR/jwt_tool" ]; then
+            pip3 install -r "$TOOLS_DIR/jwt_tool/requirements.txt" --break-system-packages > /dev/null 2>&1 || true
+            ln -sf "$TOOLS_DIR/jwt_tool/jwt_tool.py" /usr/local/bin/jwt_tool
+            chmod +x "$TOOLS_DIR/jwt_tool/jwt_tool.py"
+            INSTALLED+=("jwt_tool")
+        else
+            FAILED+=("jwt_tool")
+        fi
     fi
 fi
 
-# tplmap (SSTI exploitation)
-log "Installing tplmap..."
-if [ ! -d "$TOOLS_DIR/tplmap" ]; then
-    git clone --depth 1 https://github.com/epinna/tplmap.git "$TOOLS_DIR/tplmap" 2>/dev/null
-    if [ -d "$TOOLS_DIR/tplmap" ]; then
-        pip3 install -r "$TOOLS_DIR/tplmap/requirements.txt" --break-system-packages > /dev/null 2>&1 || true
-        ln -sf "$TOOLS_DIR/tplmap/tplmap.py" /usr/local/bin/tplmap
-        chmod +x "$TOOLS_DIR/tplmap/tplmap.py"
-        INSTALLED+=("tplmap")
-    else
-        FAILED+=("tplmap")
+if [ "${INSTALL_TPLMAP:-true}" = "true" ]; then
+    log "Installing tplmap (SSTI)..."
+    if [ ! -d "$TOOLS_DIR/tplmap" ]; then
+        git clone --depth 1 https://github.com/epinna/tplmap.git "$TOOLS_DIR/tplmap" 2>/dev/null
+        if [ -d "$TOOLS_DIR/tplmap" ]; then
+            pip3 install -r "$TOOLS_DIR/tplmap/requirements.txt" --break-system-packages > /dev/null 2>&1 || true
+            ln -sf "$TOOLS_DIR/tplmap/tplmap.py" /usr/local/bin/tplmap
+            chmod +x "$TOOLS_DIR/tplmap/tplmap.py"
+            INSTALLED+=("tplmap")
+        else
+            FAILED+=("tplmap")
+        fi
     fi
 fi
 
@@ -508,224 +556,261 @@ Or install via: sudo apt install burpsuite (if available in Parrot repos)
 BURPEOF
 fi
 
+else
+    warn "Skipping Web Application Testing (disabled in menu)"
+fi # CAT_WEB
+
 # =============================================================================
 section "PHASE 5: EXPLOITATION"
 # =============================================================================
+if [ "$CAT_EXPLOIT" -eq 1 ]; then
+
 log "The part people write scary articles about. Authorized targets only."
-safe_install metasploit-framework
-# crackmapexec is deprecated — netexec is the successor (installed via pip below)
-safe_install evil-winrm
-safe_install responder
-safe_install swaks
 
-# impacket — try apt package first (more stable on Parrot 13), pip as fallback
-if apt-get install -y python3-impacket > /dev/null 2>&1; then
-    INSTALLED+=("impacket")
-else
-    pip_install impacket
-fi
-pip_install netexec
-pip_install pwncat-cs
-pip_install certipy-ad
+for pkg in "${EXPLOIT_APT[@]}"; do
+    safe_install "$pkg"
+done
+for pkg in "${EXPLOIT_PIP[@]}"; do
+    pip_install "$pkg"
+done
 
-# Kerbrute
-if ! command -v kerbrute &> /dev/null; then
-    log "Downloading kerbrute..."
-    KERBRUTE_URL="https://github.com/ropnop/kerbrute/releases/latest/download/kerbrute_linux_amd64"
-    if wget -q -O /usr/local/bin/kerbrute "$KERBRUTE_URL" 2>/dev/null; then
-        chmod +x /usr/local/bin/kerbrute
-        INSTALLED+=("kerbrute")
+if [ "${INSTALL_IMPACKET:-true}" = "true" ]; then
+    # impacket -- try apt package first (more stable on Parrot 13), pip as fallback
+    if apt-get install -y python3-impacket > /dev/null 2>&1; then
+        INSTALLED+=("impacket")
     else
-        FAILED+=("kerbrute")
+        pip_install impacket
     fi
 fi
 
-# Nishang PowerShell scripts
-log "Downloading Nishang..."
-if [ ! -d "$TOOLS_DIR/nishang" ]; then
-    git clone --depth 1 https://github.com/samratashok/nishang.git "$TOOLS_DIR/nishang" 2>/dev/null && \
-        INSTALLED+=("nishang") || FAILED+=("nishang")
+if [ "${INSTALL_KERBRUTE:-true}" = "true" ]; then
+    if ! command -v kerbrute &> /dev/null; then
+        log "Downloading kerbrute..."
+        KERBRUTE_URL="https://github.com/ropnop/kerbrute/releases/latest/download/kerbrute_linux_amd64"
+        if wget -q -O /usr/local/bin/kerbrute "$KERBRUTE_URL" 2>/dev/null; then
+            chmod +x /usr/local/bin/kerbrute
+            INSTALLED+=("kerbrute")
+        else
+            FAILED+=("kerbrute")
+        fi
+    fi
 fi
+
+if [ "${INSTALL_NISHANG:-true}" = "true" ]; then
+    log "Downloading Nishang (PowerShell scripts)..."
+    if [ ! -d "$TOOLS_DIR/nishang" ]; then
+        git clone --depth 1 https://github.com/samratashok/nishang.git "$TOOLS_DIR/nishang" 2>/dev/null && \
+            INSTALLED+=("nishang") || FAILED+=("nishang")
+    fi
+fi
+
+else
+    warn "Skipping Exploitation (disabled in menu)"
+fi # CAT_EXPLOIT
 
 # =============================================================================
 section "PHASE 6: PASSWORD ATTACKS"
 # =============================================================================
+if [ "$CAT_PASSWORDS" -eq 1 ]; then
+
 log "rockyou.txt: 14 million reasons why 'password123' was a terrible idea."
-safe_install john
-safe_install hashcat
-safe_install hydra
-safe_install cewl
-safe_install crunch
-safe_install hash-identifier
 
-pip_install hashid
+for pkg in "${PASS_APT[@]}"; do
+    safe_install "$pkg"
+done
+for pkg in "${PASS_PIP[@]}"; do
+    pip_install "$pkg"
+done
 
-# Wordlists
-log "Installing SecLists..."
-if [ ! -d "/usr/share/seclists" ]; then
-    apt-get install -y seclists > /dev/null 2>&1 || {
-        git clone --depth 1 https://github.com/danielmiessler/SecLists.git /usr/share/seclists 2>/dev/null
-    }
-    if [ -d "/usr/share/seclists" ]; then
-        INSTALLED+=("seclists")
+if [ "${INSTALL_SECLISTS:-true}" = "true" ]; then
+    log "Installing SecLists..."
+    if [ ! -d "/usr/share/seclists" ]; then
+        apt-get install -y seclists > /dev/null 2>&1 || {
+            git clone --depth 1 https://github.com/danielmiessler/SecLists.git /usr/share/seclists 2>/dev/null
+        }
+        if [ -d "/usr/share/seclists" ]; then
+            INSTALLED+=("seclists")
+        else
+            FAILED+=("seclists")
+        fi
     else
-        FAILED+=("seclists")
+        SKIPPED+=("seclists")
     fi
-else
-    SKIPPED+=("seclists")
 fi
 
 log "Ensuring rockyou.txt is available..."
 if [ -f /usr/share/wordlists/rockyou.txt.gz ]; then
     gunzip -k /usr/share/wordlists/rockyou.txt.gz 2>/dev/null || true
 fi
-safe_install wordlists
+
+else
+    warn "Skipping Password Attacks (disabled in menu)"
+fi # CAT_PASSWORDS
 
 # =============================================================================
 section "PHASE 7: POST-EXPLOITATION"
 # =============================================================================
+if [ "$CAT_POSTEXPLOIT" -eq 1 ]; then
+
 log "You're in. Now figure out where you are, what you can reach, and how deep it goes."
-safe_install bloodhound     # GUI graph tool (needs neo4j)
-safe_install neo4j
-safe_install socat
-safe_install proxychains4
-safe_install sshuttle
-# mimikatz/powercat: Windows-only binaries — download from GitHub when needed
 
-pip_install pypykatz
+for pkg in "${POST_APT[@]}"; do
+    safe_install "$pkg"
+done
+for pkg in "${POST_PIP[@]}"; do
+    pip_install "$pkg"
+done
 
-# Chisel
-if ! command -v chisel &> /dev/null; then
-    go_install chisel "github.com/jpillora/chisel@latest"
-fi
-
-# dnscat2
-log "Downloading dnscat2..."
-if [ ! -d "$TOOLS_DIR/dnscat2" ]; then
-    git clone --depth 1 https://github.com/iagox86/dnscat2.git "$TOOLS_DIR/dnscat2" 2>/dev/null
-    if [ -d "$TOOLS_DIR/dnscat2" ]; then
-        cd "$TOOLS_DIR/dnscat2/server" && gem install bundler 2>/dev/null && bundle install 2>/dev/null || true
-        cd /
-        INSTALLED+=("dnscat2")
-    else
-        FAILED+=("dnscat2")
+if [ "${INSTALL_CHISEL:-true}" = "true" ]; then
+    if ! command -v chisel &> /dev/null; then
+        go_install chisel "github.com/jpillora/chisel@latest"
     fi
 fi
 
-# LinPEAS / WinPEAS
-log "Downloading PEAS suite..."
-PEAS_DIR="$TOOLS_DIR/peas"
-mkdir -p "$PEAS_DIR"
-wget -q -O "$PEAS_DIR/linpeas.sh" "https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh" 2>/dev/null && chmod +x "$PEAS_DIR/linpeas.sh" || warn "Failed to download linpeas"
-wget -q -O "$PEAS_DIR/winPEASx64.exe" "https://github.com/peass-ng/PEASS-ng/releases/latest/download/winPEASx64.exe" 2>/dev/null || warn "Failed to download winpeas"
-
-# pspy
-log "Downloading pspy..."
-mkdir -p "$TOOLS_DIR/pspy"
-wget -q -O "$TOOLS_DIR/pspy/pspy64" "https://github.com/DominicBreuker/pspy/releases/latest/download/pspy64" 2>/dev/null && chmod +x "$TOOLS_DIR/pspy/pspy64" || warn "Failed to download pspy"
-
-# Ligolo-ng
-log "Downloading ligolo-ng..."
-LIGOLO_DIR="$TOOLS_DIR/ligolo-ng"
-mkdir -p "$LIGOLO_DIR"
-LIGOLO_VER=$(curl -s https://api.github.com/repos/nicocha30/ligolo-ng/releases/latest | jq -r '.tag_name' 2>/dev/null)
-if [ -n "$LIGOLO_VER" ] && [ "$LIGOLO_VER" != "null" ]; then
-    wget -q -O "$LIGOLO_DIR/ligolo-proxy.tar.gz" "https://github.com/nicocha30/ligolo-ng/releases/download/${LIGOLO_VER}/ligolo-ng_proxy_${LIGOLO_VER#v}_linux_amd64.tar.gz" 2>/dev/null
-    tar -xzf "$LIGOLO_DIR/ligolo-proxy.tar.gz" -C "$LIGOLO_DIR" 2>/dev/null || true
-    rm -f "$LIGOLO_DIR/ligolo-proxy.tar.gz"
-    wget -q -O "$LIGOLO_DIR/ligolo-agent.tar.gz" "https://github.com/nicocha30/ligolo-ng/releases/download/${LIGOLO_VER}/ligolo-ng_agent_${LIGOLO_VER#v}_linux_amd64.tar.gz" 2>/dev/null
-    tar -xzf "$LIGOLO_DIR/ligolo-agent.tar.gz" -C "$LIGOLO_DIR" 2>/dev/null || true
-    rm -f "$LIGOLO_DIR/ligolo-agent.tar.gz"
+if [ "${INSTALL_DNSCAT2:-true}" = "true" ]; then
+    log "Downloading dnscat2..."
+    if [ ! -d "$TOOLS_DIR/dnscat2" ]; then
+        git clone --depth 1 https://github.com/iagox86/dnscat2.git "$TOOLS_DIR/dnscat2" 2>/dev/null
+        if [ -d "$TOOLS_DIR/dnscat2" ]; then
+            cd "$TOOLS_DIR/dnscat2/server" && gem install bundler 2>/dev/null && bundle install 2>/dev/null || true
+            cd /
+            INSTALLED+=("dnscat2")
+        else
+            FAILED+=("dnscat2")
+        fi
+    fi
 fi
+
+if [ "${INSTALL_PEAS:-true}" = "true" ]; then
+    log "Downloading PEAS suite..."
+    PEAS_DIR="$TOOLS_DIR/peas"
+    mkdir -p "$PEAS_DIR"
+    wget -q -O "$PEAS_DIR/linpeas.sh" "https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh" 2>/dev/null && chmod +x "$PEAS_DIR/linpeas.sh" || warn "Failed to download linpeas"
+    wget -q -O "$PEAS_DIR/winPEASx64.exe" "https://github.com/peass-ng/PEASS-ng/releases/latest/download/winPEASx64.exe" 2>/dev/null || warn "Failed to download winpeas"
+fi
+
+if [ "${INSTALL_PSPY:-true}" = "true" ]; then
+    log "Downloading pspy..."
+    mkdir -p "$TOOLS_DIR/pspy"
+    wget -q -O "$TOOLS_DIR/pspy/pspy64" "https://github.com/DominicBreuker/pspy/releases/latest/download/pspy64" 2>/dev/null && chmod +x "$TOOLS_DIR/pspy/pspy64" || warn "Failed to download pspy"
+fi
+
+if [ "${INSTALL_LIGOLO:-true}" = "true" ]; then
+    log "Downloading ligolo-ng..."
+    LIGOLO_DIR="$TOOLS_DIR/ligolo-ng"
+    mkdir -p "$LIGOLO_DIR"
+    LIGOLO_VER=$(curl -s https://api.github.com/repos/nicocha30/ligolo-ng/releases/latest | jq -r '.tag_name' 2>/dev/null)
+    if [ -n "$LIGOLO_VER" ] && [ "$LIGOLO_VER" != "null" ]; then
+        wget -q -O "$LIGOLO_DIR/ligolo-proxy.tar.gz" "https://github.com/nicocha30/ligolo-ng/releases/download/${LIGOLO_VER}/ligolo-ng_proxy_${LIGOLO_VER#v}_linux_amd64.tar.gz" 2>/dev/null
+        tar -xzf "$LIGOLO_DIR/ligolo-proxy.tar.gz" -C "$LIGOLO_DIR" 2>/dev/null || true
+        rm -f "$LIGOLO_DIR/ligolo-proxy.tar.gz"
+        wget -q -O "$LIGOLO_DIR/ligolo-agent.tar.gz" "https://github.com/nicocha30/ligolo-ng/releases/download/${LIGOLO_VER}/ligolo-ng_agent_${LIGOLO_VER#v}_linux_amd64.tar.gz" 2>/dev/null
+        tar -xzf "$LIGOLO_DIR/ligolo-agent.tar.gz" -C "$LIGOLO_DIR" 2>/dev/null || true
+        rm -f "$LIGOLO_DIR/ligolo-agent.tar.gz"
+    fi
+fi
+
+else
+    warn "Skipping Post-Exploitation (disabled in menu)"
+fi # CAT_POSTEXPLOIT
 
 # =============================================================================
 section "PHASE 8: REVERSE ENGINEERING"
 # =============================================================================
-log "Reading other people's compiled code. Ghidra makes it slightly less painful."
-safe_install ghidra          # GUI reverse engineering suite
-safe_install radare2
-safe_install gdb
-safe_install gdb-peda
-safe_install ltrace
-safe_install strace
-safe_install binwalk
+if [ "$CAT_REVENG" -eq 1 ]; then
 
-pip_install pwntools
+log "Reading other people's compiled code. Ghidra makes it slightly less painful."
+
+for pkg in "${REVENG_APT[@]}"; do
+    safe_install "$pkg"
+done
+for pkg in "${REVENG_PIP[@]}"; do
+    pip_install "$pkg"
+done
+
+else
+    warn "Skipping Reverse Engineering (disabled in menu)"
+fi # CAT_REVENG
 
 # =============================================================================
 section "PHASE 9: FORENSICS & STEGO"
 # =============================================================================
+if [ "$CAT_FORENSICS" -eq 1 ]; then
+
 log "Finding things people tried to hide. Spoiler: steghide with rockyou is cheating and it works."
-safe_install foremost
-safe_install steghide
-safe_install exiftool
-safe_install testdisk
-safe_install pdfid
-safe_install pdf-parser
-safe_install hexedit
-safe_install xxd
-safe_install autopsy         # GUI forensics platform
 
-pip_install stegoveritas
+for pkg in "${FORENSICS_APT[@]}"; do
+    safe_install "$pkg"
+done
+for pkg in "${FORENSICS_PIP[@]}"; do
+    pip_install "$pkg"
+done
 
-# Stegseek — fast steghide cracker
-log "Installing stegseek..."
-if ! command -v stegseek &> /dev/null; then
-    STEGSEEK_DEB=$(curl -s https://api.github.com/repos/RickdeJager/stegseek/releases/latest | jq -r '.assets[].browser_download_url' 2>/dev/null | grep "\.deb$" | head -1)
-    if [ -n "$STEGSEEK_DEB" ] && [ "$STEGSEEK_DEB" != "null" ]; then
-        wget -q -O /tmp/stegseek.deb "$STEGSEEK_DEB" 2>/dev/null
-        dpkg -i /tmp/stegseek.deb > /dev/null 2>&1 || apt-get install -f -y > /dev/null 2>&1
-        rm -f /tmp/stegseek.deb
-        if command -v stegseek &> /dev/null; then
-            INSTALLED+=("stegseek")
+if [ "${INSTALL_STEGSEEK:-true}" = "true" ]; then
+    log "Installing stegseek..."
+    if ! command -v stegseek &> /dev/null; then
+        STEGSEEK_DEB=$(curl -s https://api.github.com/repos/RickdeJager/stegseek/releases/latest | jq -r '.assets[].browser_download_url' 2>/dev/null | grep "\.deb$" | head -1)
+        if [ -n "$STEGSEEK_DEB" ] && [ "$STEGSEEK_DEB" != "null" ]; then
+            wget -q -O /tmp/stegseek.deb "$STEGSEEK_DEB" 2>/dev/null
+            dpkg -i /tmp/stegseek.deb > /dev/null 2>&1 || apt-get install -f -y > /dev/null 2>&1
+            rm -f /tmp/stegseek.deb
+            command -v stegseek &> /dev/null && INSTALLED+=("stegseek") || FAILED+=("stegseek")
         else
             FAILED+=("stegseek")
         fi
-    else
-        FAILED+=("stegseek")
     fi
 fi
 
-# Volatility 3
-log "Installing Volatility 3..."
-if [ ! -d "$TOOLS_DIR/volatility3" ]; then
-    git clone https://github.com/volatilityfoundation/volatility3.git "$TOOLS_DIR/volatility3" 2>/dev/null
-    pip3 install -r "$TOOLS_DIR/volatility3/requirements.txt" --break-system-packages > /dev/null 2>&1 || true
+if [ "${INSTALL_VOLATILITY3:-true}" = "true" ]; then
+    log "Installing Volatility 3..."
+    if [ ! -d "$TOOLS_DIR/volatility3" ]; then
+        git clone https://github.com/volatilityfoundation/volatility3.git "$TOOLS_DIR/volatility3" 2>/dev/null
+        pip3 install -r "$TOOLS_DIR/volatility3/requirements.txt" --break-system-packages > /dev/null 2>&1 || true
+    fi
 fi
+
+else
+    warn "Skipping Forensics & Stego (disabled in menu)"
+fi # CAT_FORENSICS
 
 # =============================================================================
 section "PHASE 10: WIRELESS (limited in WSL)"
 # =============================================================================
-log "WSL doesn't have raw WiFi access — installing anyway for when you boot into real hardware."
-safe_install aircrack-ng
-safe_install reaver
-safe_install wifite
+if [ "$CAT_WIRELESS" -eq 1 ]; then
+
+log "WSL doesn't have raw WiFi access -- installing anyway for when you boot into real hardware."
+
+for pkg in "${WIRELESS_APT[@]}"; do
+    safe_install "$pkg"
+done
+
+else
+    warn "Skipping Wireless (disabled in menu)"
+fi # CAT_WIRELESS
 
 # =============================================================================
 section "NETWORKING & MISC UTILITIES"
 # =============================================================================
+if [ "$CAT_NETWORKING" -eq 1 ]; then
+
 log "The stuff you'll use every single session without thinking about it."
-safe_install tcpdump
-safe_install wireshark       # GUI packet analyzer
-safe_install tshark
-safe_install netcat-openbsd
-safe_install rlwrap
-safe_install tmux
-safe_install vim
-safe_install tree
-safe_install ftp
-safe_install telnet
-safe_install redis-tools
-safe_install default-mysql-client   # renamed in Debian 13
-safe_install postgresql-client
-safe_install openvpn         # For HTB VPN
-safe_install remmina          # GUI RDP/VNC client
-safe_install remmina-plugin-rdp
-safe_install remmina-plugin-vnc
+
+for pkg in "${NET_APT[@]}"; do
+    safe_install "$pkg"
+done
+
+else
+    warn "Skipping Networking & Utils (disabled in menu)"
+fi # CAT_NETWORKING
 
 # =============================================================================
 section "CREATING DESKTOP SHORTCUTS FOR PENTEST TOOLS"
 # =============================================================================
+
+if [ "$CAT_GUI" -eq 1 ]; then
+
+DESKTOP_DIR="/usr/share/applications"
+mkdir -p "$DESKTOP_DIR"
 
 # Burp Suite launcher
 cat > /usr/share/applications/burpsuite.desktop << 'EOF'
@@ -791,12 +876,14 @@ fi
 
 log "Desktop shortcuts created"
 
+fi # CAT_GUI (desktop shortcuts)
+
 # =============================================================================
 section "WSL CONFIGURATION HELPERS"
 # =============================================================================
 
 # NOTE: User creation, wsl.conf, and workspace setup are handled by
-# wsl-config/setup-user.sh — run it separately after this script:
+# wsl-config/setup-user.sh -- run it separately after this script:
 #   sudo bash wsl-config/setup-user.sh <your-username>
 
 # Create a helper to fix common WSL GUI issues
@@ -893,7 +980,7 @@ printf '%sFull install log: %s%s\n' "$GREEN" "$LOG_FILE" "$NC"
 printf '%sWordlists at: /usr/share/seclists and /usr/share/wordlists%s\n' "$GREEN" "$NC"
 
 printf '\n%s%s=== GUI QUICK START ===%s\n' "$CYAN" "$BOLD" "$NC"
-printf '%s  Individual GUI apps (Wireshark, Ghidra, etc):%s just run them — WSLg handles display\n' "$GREEN" "$NC"
+printf '%s  Individual GUI apps (Wireshark, Ghidra, etc):%s just run them -- WSLg handles display\n' "$GREEN" "$NC"
 printf '%s  Full desktop environment:%s run '\''start-desktop'\''\n' "$GREEN" "$NC"
 printf '%s  XRDP remote desktop:%s run '\''start-desktop xrdp'\'' then connect via mstsc /v:localhost:3390\n' "$GREEN" "$NC"
 printf '%s  Fix GUI issues:%s run '\''fix-wsl-gui'\''\n' "$GREEN" "$NC"
@@ -936,11 +1023,11 @@ printf '  I know you have a passwords.txt somewhere on your Desktop.\n'
 printf '  I know because %sI'\''m going to steal it%s. I'\''m a pentesting toolkit.\n' "$YELLOW" "$NC"
 printf '  That'\''s literally what I was built to do.\n'
 echo ""
-printf '  Seriously though — you'\''re learning to hack into systems with weak passwords.\n'
+printf '  Seriously though -- you'\''re learning to hack into systems with weak passwords.\n'
 printf '  Don'\''t be the guy whose own passwords are in a .txt file or saved in Chrome.\n'
 printf '  That'\''s like a locksmith leaving his front door wide open.\n'
 echo ""
-printf '  %sKeePassXC%s — free, offline, open-source password manager\n' "$GREEN" "$NC"
+printf '  %sKeePassXC%s -- free, offline, open-source password manager\n' "$GREEN" "$NC"
 printf '    %shttps://keepassxc.org%s\n' "$CYAN" "$NC"
 printf '    %shttps://keepassxc.org/docs/KeePassXC_GettingStarted%s\n' "$CYAN" "$NC"
 echo ""
@@ -951,32 +1038,32 @@ printf '  they won'\''t get breached. (Spoiler: LastPass said that too.)\n'
 printf '  And giving them to Google? That'\''s not a password manager, that'\''s a confession.\n'
 echo ""
 printf '  %sWhile you'\''re at it:%s\n' "$BOLD" "$NC"
-printf '  %s•%s Use a %sunique password%s for every single account. Yes, every one.\n' "$GREEN" "$NC" "$BOLD" "$NC"
-printf '  %s•%s Make them %slong%s (20+ chars). KeePassXC generates them for you.\n' "$GREEN" "$NC" "$BOLD" "$NC"
-printf '  %s•%s Enable %s2FA everywhere%s. TOTP app (not SMS). KeePassXC does TOTP too.\n' "$GREEN" "$NC" "$BOLD" "$NC"
-printf '  %s•%s Your master password should be a %spassphrase%s — 4+ random words.\n' "$GREEN" "$NC" "$BOLD" "$NC"
+printf '  %s*%s Use a %sunique password%s for every single account. Yes, every one.\n' "$GREEN" "$NC" "$BOLD" "$NC"
+printf '  %s*%s Make them %slong%s (20+ chars). KeePassXC generates them for you.\n' "$GREEN" "$NC" "$BOLD" "$NC"
+printf '  %s*%s Enable %s2FA everywhere%s. TOTP app (not SMS). KeePassXC does TOTP too.\n' "$GREEN" "$NC" "$BOLD" "$NC"
+printf '  %s*%s Your master password should be a %spassphrase%s -- 4+ random words.\n' "$GREEN" "$NC" "$BOLD" "$NC"
 echo ""
 printf '  %sLearn more:%s\n' "$CYAN" "$NC"
 printf '    %shttps://www.ncsc.gov.uk/collection/top-tips-for-staying-secure-online%s\n' "$CYAN" "$NC"
-printf '    (NCSC UK — the Brits know a thing or two about keeping secrets.)\n'
+printf '    (NCSC UK -- the Brits know a thing or two about keeping secrets.)\n'
 echo ""
 printf '    %shttps://www.cisa.gov/secure-our-world/use-strong-passwords%s\n' "$CYAN" "$NC"
-printf '    (CISA — US Cybersecurity Agency. Short, sweet, to the point.)\n'
+printf '    (CISA -- US Cybersecurity Agency. Short, sweet, to the point.)\n'
 echo ""
 printf '    %shttps://cyber-gouv-fr.translate.goog/bonnes-pratiques-protegez-vous?_x_tr_sl=fr&_x_tr_tl=en%s\n' "$CYAN" "$NC"
-printf '    (ANSSI — France'\''s cyber agency. They protect nuclear secrets AND croissant recipes. Auto-translated for you.)\n'
+printf '    (ANSSI -- France'\''s cyber agency. They protect nuclear secrets AND croissant recipes. Auto-translated for you.)\n'
 echo ""
 printf '    %shttps://www.troyhunt.com/passwords-evolved-authentication-guidance-for-the-modern-era/%s\n' "$CYAN" "$NC"
-printf '    (Troy Hunt — the guy who made haveibeenpwned. He definitely knows your 2008 MSN password. At least he'\''s got mine.)\n'
+printf '    (Troy Hunt -- the guy who made haveibeenpwned. He definitely knows your 2008 MSN password. At least he'\''s got mine.)\n'
 echo ""
 printf '    %shttps://ssd.eff.org/module/creating-strong-passwords%s\n' "$CYAN" "$NC"
-printf '    (EFF — they'\''ve been fighting for your digital rights since before you were born.)\n'
+printf '    (EFF -- they'\''ve been fighting for your digital rights since before you were born.)\n'
 echo ""
 printf '    %sAnd this one'\''s for your grandpa and your little sister:%s\n' "$YELLOW" "$NC"
 printf '    %shttps://staysafeonline.org/online-safety-privacy-basics/passwords-securing-accounts/%s\n' "$CYAN" "$NC"
-printf '    (National Cybersecurity Alliance — explains it so well even your cat could set up 2FA.)\n'
+printf '    (National Cybersecurity Alliance -- explains it so well even your cat could set up 2FA.)\n'
 echo ""
-printf '  %sOne last thing — go check if you'\''ve already been pwned:%s\n' "$BOLD" "$NC"
+printf '  %sOne last thing -- go check if you'\''ve already been pwned:%s\n' "$BOLD" "$NC"
 printf '    %shttps://haveibeenpwned.com%s\n' "$CYAN" "$NC"
 printf '    Go ahead, type your email. I'\''ll wait.\n'
 printf '    ...yeah. That'\''s how many companies had your password and %slost it%s.\n' "$RED" "$NC"
