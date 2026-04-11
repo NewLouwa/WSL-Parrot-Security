@@ -39,6 +39,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOOLS_DIR="/opt/htb-toolkit"
 mkdir -p "$TOOLS_DIR"
 
+# Force IPv4 for apt -- WSL2 often has broken IPv6 routing to package mirrors
+# Without this, apt will try IPv6 first, fail, and abort the fetch entirely
+echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4
+
 # Source toolkit.conf -- defines what gets installed in each category
 if [ ! -f "$SCRIPT_DIR/toolkit.conf" ]; then
     err "toolkit.conf not found in $SCRIPT_DIR"

@@ -85,7 +85,7 @@ $alreadyCloned = ($LASTEXITCODE -eq 0)
 
 # Fix sudo hostname warning before anything else runs
 # Adds the WSL hostname to /etc/hosts so sudo doesn't complain
-wsl -d $distroName -- bash -c "HN=`$(hostname); grep -q `"`$HN`" /etc/hosts 2>/dev/null || echo `"127.0.0.1 `$HN`" | tee -a /etc/hosts > /dev/null"
+wsl -d $distroName -u root -- bash -c "HN=`$(hostname); grep -q `"`$HN`" /etc/hosts 2>/dev/null || echo '127.0.0.1 '`$HN >> /etc/hosts"
 Write-OK "Hostname fix applied (/etc/hosts)"
 
 if (-not $alreadyCloned) {
