@@ -33,6 +33,38 @@ fi
 TOOLS_DIR="/opt/htb-toolkit"
 mkdir -p "$TOOLS_DIR"
 
+# =============================================================================
+# FIRST THINGS FIRST: Desktop shortcut + start directory fix
+# =============================================================================
+
+# Fix WSL start directory for root — without this WSL lands in /mnt/c/Users/...
+# (your Windows profile) instead of /root. This makes it sane immediately.
+if ! grep -q "mnt.*cd ~" /root/.bashrc 2>/dev/null; then
+    cat >> /root/.bashrc << 'RCEOF'
+
+# Start in home directory instead of Windows mount path
+[[ "$PWD" == /mnt/* ]] && cd ~
+RCEOF
+    log "Fixed: WSL will now start in home directory instead of Windows path"
+fi
+
+# Create a Windows Desktop shortcut right now, before anything else.
+# So even if the install fails halfway, you still have a way back in.
+WIN_USER=$(cmd.exe /c "echo %USERNAME%" 2>/dev/null | tr -d '\r\n')
+WIN_DESKTOP="/mnt/c/Users/$WIN_USER/Desktop"
+if [ -n "$WIN_USER" ] && [ -d "$WIN_DESKTOP" ]; then
+    cat > "$WIN_DESKTOP/Parrot HTB Toolkit.bat" << 'BATEOF'
+@echo off
+title Parrot HTB Toolkit
+where wt >nul 2>&1 && (wt wsl) || wsl
+BATEOF
+    log "Desktop shortcut created on your Windows Desktop: 'Parrot HTB Toolkit.bat'"
+    log "  Double-click it from Windows to launch straight into your toolkit"
+else
+    warn "Could not detect Windows Desktop — shortcut not created"
+    warn "  To launch WSL from Windows, just run: wsl"
+fi
+
 INSTALLED=()
 FAILED=()
 SKIPPED=()
@@ -123,6 +155,7 @@ export PATH="$PATH:/root/go/bin:/usr/local/go/bin"
 if [ -n "$SUDO_USER" ]; then
     export PATH="$PATH:/home/$SUDO_USER/go/bin"
 fi
+
 
 # =============================================================================
 section "GUI / DESKTOP ENVIRONMENT SETUP"
