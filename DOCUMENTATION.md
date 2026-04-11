@@ -833,6 +833,24 @@ The `setup-user.sh` script creates an organized workspace under your home direct
 └── www/                   # Files to serve to targets via HTTP
 ```
 
+### Cheat Sheet Command
+
+`cheat <toolname>` displays the markdown cheat sheet for any installed tool directly in your terminal. No need to open a browser or hunt through the repo.
+
+```bash
+cheat nmap           # nmap reference
+cheat burpsuite      # Burp Suite tips
+cheat proxychains4   # package names work too (strips the 4)
+cheat msfconsole     # common aliases supported
+cheat                # no args = list all available tools
+```
+
+The command searches `~/WSL-Parrot-Security/` for a matching `.md` file. It tries the exact name first, then strips common package suffixes (`4`, `-ng`, `-tools`, `-openbsd`, `-framework`, `python3-`), then falls back to a built-in alias table for names that don't follow a pattern (e.g. `msfconsole` → `metasploit.md`, `cme` → `crackmapexec.md`).
+
+If `bat` is installed it renders with syntax highlighting, otherwise falls back to `cat`.
+
+---
+
 ### Helper Scripts
 
 **new-machine.sh** -- Create a structured folder for a new HTB machine with subdirectories for recon, exploit, loot, privesc, and screenshots, plus a pre-filled `notes.md` template. If an IP is provided, it also adds a hostname entry to `/etc/hosts`.
@@ -912,11 +930,20 @@ htb-connect --disconnect   # Kill the VPN connection
 
 The following aliases are set up for convenience:
 
-| Alias | Command |
-|-------|---------|
-| `vpn` | `htb-connect` (interactive mode) |
-| `vpn-dc` | `htb-connect --disconnect` |
-| `vpn-status` | `htb-connect --status` |
+| Alias / Command | Description |
+|-----------------|-------------|
+| `vpn` | `htb-connect` — connect to HTB VPN (interactive) |
+| `vpn-dc` | Disconnect from VPN |
+| `vpn-status` | Check VPN connection status |
+| `cheat <tool>` | Show tool cheat sheet (`cheat nmap`, `cheat burp`) |
+| `htb` | `cd ~/workspace/htb` |
+| `ws` | `cd ~/workspace` |
+| `machines` | `cd ~/workspace/htb/machines` |
+| `challenges` | `cd ~/workspace/htb/challenges` |
+| `myip` | Show your HTB VPN IP (tun0) |
+| `serve` | Start HTTP server for file transfer |
+| `rsh <port>` | `rlwrap nc -lvnp` — reverse shell listener |
+| `ports` | `ss -tlnp` — show listening ports |
 
 ---
 

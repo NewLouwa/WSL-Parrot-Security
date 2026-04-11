@@ -8,6 +8,7 @@ So I built this: **one script** that installs everything, and **a doc for every 
 - Full GUI desktop included (XFCE4 + XRDP + Brave) so you're not stuck in CLI-only WSL
 - Every tool has a `.md` cheat sheet with purpose, usage examples, and HTB-specific tips
 - Organized by pentest phase so you can find what you need when you need it
+- `cheat <toolname>` anywhere in your terminal to instantly pull up a tool's cheat sheet
 
 > If this project helped you, consider leaving a star on the repo :)
 
@@ -97,9 +98,19 @@ This gives you:
 - WSL opens in your home directory
 - `~/workspace/` with organized folders for machines, challenges, loot, scripts
 - Helper commands: `new-machine`, `new-challenge`, `htb-shell`, `serve`, `myip`, `vpn`
+- **`cheat <toolname>`** — pull up any tool's cheat sheet instantly from the terminal
 - Per-project command history logging with `htb-shell` (great for writeups)
 - 100+ security bookmarks auto-imported into Brave and Firefox
 - Login banner with quick reference and VPN status
+
+```bash
+# Cheat sheet examples
+cheat nmap          # nmap reference
+cheat burpsuite     # Burp Suite tips
+cheat proxychains4  # works with package names too
+cheat msfconsole    # aliases supported
+cheat               # no args = list all available tools
+```
 
 Full list of aliases and shell commands: [`wsl-config/README.md`](wsl-config/README.md)
 
@@ -259,7 +270,8 @@ The toolkit is organized into 11 phases following the standard penetration testi
 | [crunch](06-Password-Attacks/crunch.md) | Pattern-based wordlist generator |
 | [hash-identifier](06-Password-Attacks/hash-identifier.md) | Hash type identification |
 | [hashid](06-Password-Attacks/hashid.md) | Better hash identifier with mode output |
-| [Wordlists](06-Password-Attacks/wordlists.md) | SecLists & rockyou reference |
+| [Wordlists](06-Password-Attacks/wordlists.md) | rockyou & custom wordlist reference |
+| [SecLists](06-Password-Attacks/seclists.md) | The wordlist collection — paths & best picks |
 
 </details>
 
@@ -330,6 +342,7 @@ The toolkit is organized into 11 phases following the standard penetration testi
 | Tool | Description |
 |------|-------------|
 | [Wireshark](11-Networking-Utilities/wireshark.md) | Packet analyzer (GUI) |
+| [tshark](11-Networking-Utilities/tshark.md) | CLI packet capture & analysis |
 | [netcat](11-Networking-Utilities/netcat.md) | TCP/UDP network tool |
 | [tcpdump](11-Networking-Utilities/tcpdump.md) | CLI packet capture |
 | [tmux](11-Networking-Utilities/tmux.md) | Terminal multiplexer |
@@ -484,6 +497,8 @@ PRs welcome. To add a new tool:
 This toolkit is intended for **authorized security testing, CTF competitions, and educational purposes only**. All tools should be used in controlled environments such as HackTheBox, TryHackMe, or authorized penetration testing engagements.
 
 **Do not use these tools against systems you do not have explicit permission to test.**
+
+> **Not affiliated with or endorsed by HackTheBox.** This is a community project — HTB is just the platform it was built around. "HTB-approved" it is not (yet 👀).
 
 ## License
 

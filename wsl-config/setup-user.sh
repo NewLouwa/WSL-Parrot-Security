@@ -413,6 +413,82 @@ alias htb='cd ~/workspace/htb'
 alias machines='cd ~/workspace/htb/machines'
 alias challenges='cd ~/workspace/htb/challenges'
 
+# cheat <toolname>  → show tool cheat sheet from toolkit docs
+cheat() {
+    if [ -z "$1" ]; then
+        echo "Usage: cheat <toolname>"
+        echo "Example: cheat nmap"
+        echo ""
+        echo "Available tools:"
+        find "$HOME/WSL-Parrot-Security" -name "*.md" \
+            | grep -Ev "README|DOCUMENTATION|TROUBLESHOOTING|AI-DISCLAIMER" \
+            | xargs -I{} basename {} .md | sort | column
+        return
+    fi
+    local DOCS_DIR="$HOME/WSL-Parrot-Security"
+    local TOOL="$1"
+    local MD
+
+    _cheat_find() {
+        find "$DOCS_DIR" -iname "${1}.md" 2>/dev/null \
+            | grep -Ev "README|DOCUMENTATION|TROUBLESHOOTING|AI-DISCLAIMER" \
+            | head -1
+    }
+
+    MD=$(_cheat_find "$TOOL")
+
+    # Strip common package suffixes and try again
+    if [ -z "$MD" ]; then
+        local STRIPPED
+        STRIPPED=$(echo "$TOOL" \
+            | sed 's/[0-9]*$//' \          # proxychains4       → proxychains
+            | sed 's/-openbsd$//' \        # netcat-openbsd     → netcat
+            | sed 's/-tools$//' \          # snmp-tools         → snmp
+            | sed 's/-ng$//' \             # ligolo-ng          → ligolo
+            | sed 's/-framework$//' \      # metasploit-framework → metasploit
+            | sed 's/^python3-//')         # python3-impacket   → impacket
+        [ "$STRIPPED" != "$TOOL" ] && MD=$(_cheat_find "$STRIPPED")
+    fi
+
+    # Known aliases that don't follow a pattern
+    if [ -z "$MD" ]; then
+        case "${TOOL,,}" in
+            theharvester|harvester)    MD=$(_cheat_find "theharvester") ;;
+            sherlock*)                 MD=$(_cheat_find "sherlock") ;;
+            shodan*)                   MD=$(_cheat_find "shodan-cli") ;;
+            crackmapexec|cme)          MD=$(_cheat_find "crackmapexec") ;;
+            bloodhound*|sharphound*)   MD=$(_cheat_find "bloodhound") ;;
+            zaproxy|owasp-zap|zap)    MD=$(_cheat_find "zaproxy") ;;
+            burp*)                     MD=$(_cheat_find "burpsuite") ;;
+            ncat|nc)                   MD=$(_cheat_find "netcat") ;;
+            john*|jtr)                 MD=$(_cheat_find "john") ;;
+            msf|msfconsole)            MD=$(_cheat_find "metasploit") ;;
+            proxychains*)              MD=$(_cheat_find "proxychains") ;;
+            pwncat*)                   MD=$(_cheat_find "pwncat") ;;
+            certipy*)                  MD=$(_cheat_find "certipy") ;;
+            ligolo*)                   MD=$(_cheat_find "ligolo-ng") ;;
+            linpeas|winpeas|peas)      MD=$(_cheat_find "linpeas-winpeas") ;;
+            ltrace|strace)             MD=$(_cheat_find "ltrace-strace") ;;
+            hexedit|xxd|hexdump)       MD=$(_cheat_find "hexedit") ;;
+        esac
+    fi
+
+    if [ -n "$MD" ]; then
+        if command -v bat &>/dev/null; then
+            bat --style=plain --language=markdown "$MD"
+        else
+            cat "$MD"
+        fi
+    else
+        echo "[-] No cheat sheet found for '$1'"
+        echo ""
+        echo "[*] Available tools:"
+        find "$DOCS_DIR" -name "*.md" \
+            | grep -Ev "README|DOCUMENTATION|TROUBLESHOOTING|AI-DISCLAIMER" \
+            | xargs -I{} basename {} .md | sort | column
+    fi
+}
+
 # Tools
 alias serve='bash ~/workspace/scripts/serve.sh'
 alias new-machine='bash ~/workspace/scripts/new-machine.sh'
@@ -517,6 +593,7 @@ echo "    ${CYAN}htb-shell Lame${NC}               — enter project shell (logs
 echo "    ${CYAN}new-challenge web easy-rsa${NC}   — start a challenge"
 echo "    ${CYAN}serve${NC}                        — HTTP server for file transfer"
 echo "    ${CYAN}myip${NC}                         — show HTB VPN IP"
+echo "    ${CYAN}cheat nmap${NC}                   — show any tool's cheat sheet"
 
 # Check if tools have been installed
 if [ ! -f /etc/.parrot-toolkit-installed ]; then
