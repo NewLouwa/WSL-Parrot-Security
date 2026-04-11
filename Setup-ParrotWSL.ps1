@@ -83,11 +83,6 @@ Write-Host ""
 wsl -d $distroName -- test -d "~/$REPO_NAME"
 $alreadyCloned = ($LASTEXITCODE -eq 0)
 
-# Fix sudo hostname warning before anything else runs
-# Adds the WSL hostname to /etc/hosts so sudo doesn't complain
-wsl -d $distroName -u root -- bash -c "HN=`$(hostname); grep -q `"`$HN`" /etc/hosts 2>/dev/null || echo '127.0.0.1 '`$HN >> /etc/hosts"
-Write-OK "Hostname fix applied (/etc/hosts)"
-
 if (-not $alreadyCloned) {
     Write-Info "Cloning toolkit into Linux home (not /mnt/c - Linux filesystem only)..."
     wsl -d $distroName -- bash -c "cd ~; git clone --depth 1 $REPO_URL"

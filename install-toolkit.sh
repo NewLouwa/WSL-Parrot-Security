@@ -39,6 +39,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOOLS_DIR="/opt/htb-toolkit"
 mkdir -p "$TOOLS_DIR"
 
+# Fix "sudo: unable to resolve host" -- WSL doesn't add its hostname to /etc/hosts
+# by default. Running as root so no sudo needed, do it before anything else fires.
+HN=$(hostname)
+grep -q "$HN" /etc/hosts 2>/dev/null || echo "127.0.0.1 $HN" >> /etc/hosts
+
 # Force IPv4 for apt -- WSL2 often has broken IPv6 routing to package mirrors
 # Without this, apt will try IPv6 first, fail, and abort the fetch entirely
 echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4
