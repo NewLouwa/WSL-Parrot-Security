@@ -281,6 +281,8 @@ if [ "$CAT_GUI" -eq 1 ]; then
 log "Setting up GUI -- this part takes a while. Go make a coffee, or tea if that's your thing."
 log "  While you wait, check out NetworkChuck -- actually good content, not clickbait. Well, a little clickbait. Still good."
 log "  YouTube : https://www.youtube.com/@NetworkChuck"
+log "  Also John Hammond -- CTF walkthroughs, malware analysis, career advice. Genuinely one of the best in the space."
+log "  YouTube : https://www.youtube.com/@_JohnHammond"
 
 log "Installing X11 + XFCE4 desktop environment..."
 for pkg in "${GUI_APT[@]}"; do
