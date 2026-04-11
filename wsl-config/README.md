@@ -140,24 +140,76 @@ After running `setup-user.sh`, your home directory will have:
 
 ## Shell Aliases
 
-After setup, these aliases are available:
+After setup, these aliases are available in every shell session.
 
-| Alias | Command |
-|-------|---------|
+### Navigation
+
+| Alias | What it does |
+|-------|-------------|
 | `ws` | `cd ~/workspace` |
 | `htb` | `cd ~/workspace/htb` |
 | `machines` | `cd ~/workspace/htb/machines` |
-| `new-machine` | Create new machine workspace |
-| `new-challenge` | Create new challenge workspace |
-| `serve` | Start HTTP server on port 8080 from ~/workspace/www |
-| `myip` | Show your HTB VPN IP (tun0) |
-| `rsh 4444` | `rlwrap nc -lvnp 4444` |
-| `vpn` | `htb-connect` (interactive VPN connect) |
-| `vpn-dc` | Disconnect VPN |
-| `vpn-status` | Check VPN status |
-| `pserv` | `python3 -m http.server` |
-| `htb-shell Name` | Enter project shell with per-machine command logging |
-| `clip` | Copy to Windows clipboard via `clip.exe` |
+| `challenges` | `cd ~/workspace/htb/challenges` |
+
+### Machine & Challenge Management
+
+```bash
+new-machine <name> [ip]       # create a new machine workspace
+new-machine Lame 10.10.10.3   # with target IP (also adds to /etc/hosts)
+new-machine Lame               # without IP
+
+new-challenge <category> <name>          # create a challenge workspace
+new-challenge web easy-login             # web challenge
+new-challenge crypto caesar-cipher       # crypto challenge
+```
+
+### Shells & Listeners
+
+```bash
+rsh <port>        # reverse shell listener — rlwrap nc -lvnp <port>
+rsh 4444          # listen on 4444 with rlwrap (arrow keys work in shell)
+
+htb-shell <name>  # enter per-machine shell with command logging
+htb-shell Lame    # prompt changes to [Lame], all commands logged to .cmd_history
+```
+
+### File Transfer
+
+```bash
+serve             # HTTP server on port 8080, serves ~/workspace/www
+serve 80          # serve on port 80 (needs sudo)
+serve 9000 /tmp   # custom port and directory
+
+pserv             # python3 -m http.server (quick one-off, no alias config)
+pserv 9001        # on a specific port
+```
+
+### Networking
+
+```bash
+myip              # show your HTB VPN IP (tun0 interface)
+                  # returns "VPN not connected" if tun0 is down
+ports             # ss -tlnp — show all listening ports
+
+vpn               # htb-connect interactive — finds .ovpn files, lets you pick
+vpn-dc            # disconnect VPN
+vpn-status        # check if VPN is running and show current IP
+```
+
+### Utilities
+
+```bash
+clip              # copy to Windows clipboard
+echo "hello" | clip
+cat file.txt | clip
+
+ll                # ls -alh (long list with sizes)
+la                # ls -A (show hidden files)
+
+rm                # rm -i (always asks before deleting)
+mv                # mv -i (always asks before overwriting)
+cp                # cp -i (always asks before overwriting)
+```
 
 ## Per-Project Command History
 

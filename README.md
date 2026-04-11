@@ -15,38 +15,71 @@ So I built this: **one script** that installs everything, and **a doc for every 
 
 ## TL;DR — Quick Install
 
-```bash
-git clone --depth 1 https://github.com/NewLouwa/WSL-Parrot-Security.git
-cd WSL-Parrot-Security
-sudo bash install-toolkit.sh        # installs tools + GUI, then prompts for user setup
+**On Windows (PowerShell):**
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process; Invoke-WebRequest -Uri "https://raw.githubusercontent.com/NewLouwa/WSL-Parrot-Security/main/Setup-ParrotWSL.ps1" -OutFile "$env:TEMP\Setup-ParrotWSL.ps1"; & "$env:TEMP\Setup-ParrotWSL.ps1"
 ```
 
-That's it. The script will install everything and ask if you want to set up your user and workspace at the end. You can also run them separately — see below.
+That's the only command you need to run on the Windows side. It detects whether Parrot is installed and tells you exactly what to do next — no guessing.
 
 ---
 
 ## Full Setup Guide
 
-### 1. Install Parrot WSL
+There are two entry points depending on where you are:
 
-Follow the official guide: **[Parrot OS WSL Installation](https://parrotsec.org/docs/installation/install-with-wsl/)**
+| Situation | What to run |
+|-----------|-------------|
+| Fresh Windows machine, Parrot not installed | `Setup-ParrotWSL.ps1` (PowerShell) |
+| Parrot already installed, just need the tools | `sudo bash install-toolkit.sh` (inside WSL) |
 
-Parrot OS is **not on the Microsoft Store**. You either:
-- Download the `.appx` / `.wsl` archive from the official Parrot site
-- Or install Debian from the Store and upgrade it to Parrot (see [WSL Setup From Scratch](#wsl-setup-from-scratch) below)
+Both paths end up in the same place.
 
-### 2. Run the Installer
+---
+
+### Path A — Starting from scratch (PowerShell first)
+
+```powershell
+# Run this from PowerShell — no admin needed
+Set-ExecutionPolicy Bypass -Scope Process
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/NewLouwa/WSL-Parrot-Security/main/Setup-ParrotWSL.ps1" -OutFile "$env:TEMP\Setup-ParrotWSL.ps1"
+& "$env:TEMP\Setup-ParrotWSL.ps1"
+```
+
+The script will:
+- **Detect** whether Parrot WSL is already installed
+- **If not** → open the Parrot download page and walk you through installing it step by step
+- **If yes** → give you the exact commands to clone and run the installer inside WSL
+
+Once Parrot is up, jump to Path B.
+
+---
+
+### Path B — Parrot is installed, run the toolkit
+
+> **Important:** Clone inside your Linux home directory, not on the Windows filesystem.
+> Running from `/mnt/c/...` causes permission issues and slows everything down.
+> Your Linux home is `~` — that's `/root` or `/home/youruser` inside WSL.
+
+If you ran `Setup-ParrotWSL.ps1`, it already cloned the repo into your Linux home and dropped you there. Just run:
 
 ```bash
-# Clone this repo inside WSL
+sudo bash WSL-Parrot-Security/install-toolkit.sh
+```
+
+If you're doing it manually:
+
+```bash
+# Make sure you're in your Linux home, not on /mnt/c/
+cd ~
 git clone --depth 1 https://github.com/NewLouwa/WSL-Parrot-Security.git
 cd WSL-Parrot-Security
-
-# Install all tools + GUI desktop
 sudo bash install-toolkit.sh
 ```
 
-### 3. Set Up Your User & Workspace
+Once the install finishes it'll ask if you want to run the user setup next — say yes.
+
+### Set Up Your User & Workspace
 
 > **Note:** The tools installer already prompts you to run this at the end. If you skipped it or want to run it separately:
 
@@ -68,9 +101,9 @@ This gives you:
 - 100+ security bookmarks auto-imported into Brave and Firefox
 - Login banner with quick reference and VPN status
 
-See [`wsl-config/README.md`](wsl-config/README.md) for full details and manual setup options.
+Full list of aliases and shell commands: [`wsl-config/README.md`](wsl-config/README.md)
 
-### 4. Start the GUI
+### 3. Start the GUI
 
 ```bash
 # Auto-detect best method (WSLg or XRDP)
@@ -84,7 +117,7 @@ start-desktop xrdp
 start-desktop wslg
 ```
 
-### 5. Connect to HTB
+### 4. Connect to HTB
 
 ```bash
 # Interactive — finds your .ovpn files and lets you pick
@@ -336,6 +369,7 @@ Then connect from Windows using **Remote Desktop Connection** (`mstsc`) to `loca
 
 ```
 WSL-Parrot-Security/
+├── Setup-ParrotWSL.ps1         # Run this first on Windows — detects/installs Parrot WSL
 ├── install-toolkit.sh          # Main installer script (tools + GUI)
 ├── wsl-config/                 # WSL user & workspace setup
 │   ├── setup-user.sh           # Creates user, workspace, aliases

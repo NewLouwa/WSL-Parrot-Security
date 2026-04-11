@@ -34,6 +34,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOOLS_DIR="/opt/htb-toolkit"
 mkdir -p "$TOOLS_DIR"
 
+# Fix "sudo: unable to resolve host" warning — happens when /etc/hosts
+# doesn't have an entry for the current hostname. Silent, runs once.
+HOSTNAME_CURRENT=$(hostname 2>/dev/null)
+if [ -n "$HOSTNAME_CURRENT" ] && ! grep -q "$HOSTNAME_CURRENT" /etc/hosts 2>/dev/null; then
+    echo "127.0.0.1 $HOSTNAME_CURRENT" >> /etc/hosts
+    log "Fixed: added $HOSTNAME_CURRENT to /etc/hosts (no more sudo hostname warnings)"
+fi
+
 # =============================================================================
 # FIRST THINGS FIRST: Desktop shortcut + start directory fix
 # =============================================================================

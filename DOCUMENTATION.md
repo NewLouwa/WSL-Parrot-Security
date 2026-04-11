@@ -1,35 +1,34 @@
 # Parrot WSL Security Toolkit — Full Documentation
 
-Complete reference guide for the Parrot WSL Security Toolkit. Covers installation, GUI setup, all 100+ tools organized by pentest phase, and WSL-specific configuration.
+Full reference for everything in the toolkit. If you just installed it and want to get going, start with **[Recommended Workflow for HTB](#recommended-workflow-for-htb)**. If you're looking for a specific tool, jump to its phase section. If something broke, go to **[Troubleshooting](#troubleshooting)**.
 
 ---
 
-## Table of Contents
+## What's in here
 
-- [Installation](#installation)
-- [GUI Desktop Setup](#gui-desktop-setup)
-- [WSL Configuration](#wsl-configuration)
-- [Phase 1: Reconnaissance](#phase-1-reconnaissance)
-- [Phase 2: Scanning & Enumeration](#phase-2-scanning--enumeration)
-- [Phase 3: Vulnerability Analysis](#phase-3-vulnerability-analysis)
-- [Phase 4: Web Application Testing](#phase-4-web-application-testing)
-- [Phase 5: Exploitation](#phase-5-exploitation)
-- [Phase 6: Password Attacks](#phase-6-password-attacks)
-- [Phase 7: Post-Exploitation](#phase-7-post-exploitation)
-- [Phase 8: Reverse Engineering](#phase-8-reverse-engineering)
-- [Phase 9: Forensics & Steganography](#phase-9-forensics--steganography)
-- [Phase 10: Wireless](#phase-10-wireless)
-- [Phase 11: Networking Utilities](#phase-11-networking-utilities)
-- [Recommended Workflow for HTB](#recommended-workflow-for-htb)
-- [Workspace Setup](#workspace-setup)
-- [HTB Connect (VPN)](#htb-connect-vpn)
-- [Login Banner (MOTD)](#login-banner-motd)
-- [Shell Aliases](#shell-aliases)
-- [Browser Bookmarks](#browser-bookmarks)
-- [Per-Project Command History](#per-project-command-history)
-- [Troubleshooting](#troubleshooting)
-- [Linux Filesystem Reference](#linux-filesystem-reference)
-- [Windows Filesystem Reference](#windows-filesystem-reference)
+| Section | What you'll find |
+|---------|-----------------|
+| [Installation](#installation) | How to install, what goes where, install log |
+| [GUI Desktop Setup](#gui-desktop-setup) | WSLg, XRDP, full desktop, fixing display issues |
+| [WSL Configuration](#wsl-configuration) | wsl.conf, user setup, workspace structure |
+| [Shell Aliases](#shell-aliases) | Every alias and shortcut command with syntax |
+| [Per-Project Command History](#per-project-command-history) | htb-shell — per-machine logging for writeups |
+| [HTB Connect (VPN)](#htb-connect-vpn) | Connecting to HTB VPN, auto-discovery, status |
+| [Recommended Workflow for HTB](#recommended-workflow-for-htb) | Full step-by-step flow from recon to root |
+| [Phase 1: Reconnaissance](#phase-1-reconnaissance) | nmap, amass, theHarvester, OSINT tools |
+| [Phase 2: Scanning & Enumeration](#phase-2-scanning--enumeration) | gobuster, ffuf, enum4linux, SMB, LDAP |
+| [Phase 3: Vulnerability Analysis](#phase-3-vulnerability-analysis) | searchsploit, lynis, nmap scripts |
+| [Phase 4: Web Application Testing](#phase-4-web-application-testing) | sqlmap, Burp, XSStrike, JWT, SSTI |
+| [Phase 5: Exploitation](#phase-5-exploitation) | Metasploit, impacket, evil-winrm, AD attacks |
+| [Phase 6: Password Attacks](#phase-6-password-attacks) | hashcat, john, hydra, wordlists, rockyou |
+| [Phase 7: Post-Exploitation](#phase-7-post-exploitation) | BloodHound, chisel, ligolo, PEAS, pivoting |
+| [Phase 8: Reverse Engineering](#phase-8-reverse-engineering) | Ghidra, GDB, pwntools, radare2 |
+| [Phase 9: Forensics & Steganography](#phase-9-forensics--steganography) | volatility, steghide, stegseek, exiftool |
+| [Phase 10: Wireless](#phase-10-wireless) | aircrack-ng, wifite (limited in WSL) |
+| [Phase 11: Networking Utilities](#phase-11-networking-utilities) | Wireshark, netcat, socat, tmux, openvpn |
+| [Linux Filesystem Reference](#linux-filesystem-reference) | What every directory is for, useful paths |
+| [Windows Filesystem Reference](#windows-filesystem-reference) | Windows paths, how to find files |
+| [Troubleshooting](#troubleshooting) | GUI issues, XRDP, failed installs, GPU |
 
 ---
 
