@@ -431,13 +431,8 @@ cheat() {
     # Strip common package suffixes and try again
     if [ -z "$MD" ]; then
         local STRIPPED
-        STRIPPED=$(echo "$TOOL" \
-            | sed 's/[0-9]*$//' \          # proxychains4       → proxychains
-            | sed 's/-openbsd$//' \        # netcat-openbsd     → netcat
-            | sed 's/-tools$//' \          # snmp-tools         → snmp
-            | sed 's/-ng$//' \             # ligolo-ng          → ligolo
-            | sed 's/-framework$//' \      # metasploit-framework → metasploit
-            | sed 's/^python3-//')         # python3-impacket   → impacket
+        # proxychains4→proxychains, netcat-openbsd→netcat, ligolo-ng→ligolo, etc.
+        STRIPPED=$(echo "$TOOL" | sed 's/[0-9]*$//' | sed 's/-openbsd$//' | sed 's/-tools$//' | sed 's/-ng$//' | sed 's/-framework$//' | sed 's/^python3-//')
         [ "$STRIPPED" != "$TOOL" ] && MD=$(_cheat_find "$STRIPPED")
     fi
 

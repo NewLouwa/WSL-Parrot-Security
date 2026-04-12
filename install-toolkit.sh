@@ -504,26 +504,22 @@ if [ "${INSTALL_RUSTSCAN:-true}" = "true" ]; then
         if apt-get install -y rustscan > /dev/null 2>&1; then
             INSTALLED+=("rustscan")
         else
-            # GitHub API -- may fail if rate-limited during a long install session
+            # Try GitHub API for latest .deb
             RUSTSCAN_URL=$(curl -s --max-time 10 https://api.github.com/repos/RustScan/RustScan/releases/latest \
                 | jq -r '.assets[].browser_download_url' 2>/dev/null | grep "amd64.deb" | head -1)
-            if [ -n "$RUSTSCAN_URL" ] && [ "$RUSTSCAN_URL" != "null" ]; then
-                wget -q -O /tmp/rustscan.deb "$RUSTSCAN_URL" 2>/dev/null
-                dpkg -i /tmp/rustscan.deb > /dev/null 2>&1 || apt-get install -f -y > /dev/null 2>&1
-                rm -f /tmp/rustscan.deb
-                command -v rustscan &>/dev/null && INSTALLED+=("rustscan") || {
-                    # Last resort: cargo (slow but reliable)
-                    if command -v cargo &>/dev/null; then
-                        cargo install rustscan > /dev/null 2>&1 && INSTALLED+=("rustscan") || FAILED+=("rustscan")
-                    else
-                        warn "rustscan: GitHub rate-limited and cargo not available. Install manually: cargo install rustscan"
-                        FAILED+=("rustscan")
-                    fi
-                }
+            # Fallback: hardcoded known-good version if API is rate-limited
+            [ -z "$RUSTSCAN_URL" ] || [ "$RUSTSCAN_URL" = "null" ] && \
+                RUSTSCAN_URL="https://github.com/RustScan/RustScan/releases/download/2.3.0/rustscan_2.3.0_amd64.deb"
+            wget -q -O /tmp/rustscan.deb "$RUSTSCAN_URL" 2>/dev/null
+            if dpkg -i /tmp/rustscan.deb > /dev/null 2>&1 || { apt-get install -f -y > /dev/null 2>&1 && dpkg -i /tmp/rustscan.deb > /dev/null 2>&1; }; then
+                INSTALLED+=("rustscan")
+            elif command -v cargo &>/dev/null; then
+                log "rustscan .deb failed, trying cargo install (slow but works)..."
+                cargo install rustscan > /dev/null 2>&1 && INSTALLED+=("rustscan") || FAILED+=("rustscan")
             else
-                warn "rustscan: GitHub API rate-limited. Install manually: cargo install rustscan"
                 FAILED+=("rustscan")
             fi
+            rm -f /tmp/rustscan.deb
         fi
     else
         SKIPPED+=("rustscan")
@@ -652,9 +648,17 @@ if [ "${INSTALL_NETEXEC:-true}" = "true" ]; then
     fi
 fi
 
+# Ensure pipx is available -- pwncat/certipy/stegoveritas need isolated envs
+# pip3 on Parrot/Debian 13 breaks on dependency conflicts for these tools
+if ! command -v pipx &>/dev/null; then
+    apt-get install -y pipx > /dev/null 2>&1 || pip3 install pipx --break-system-packages > /dev/null 2>&1 || true
+fi
+
 if [ "${INSTALL_PWNCAT:-true}" = "true" ]; then
     log "Installing pwncat-cs..."
-    if pip3 install pwncat-cs --break-system-packages > /dev/null 2>&1; then
+    if command -v pipx &>/dev/null && pipx install pwncat-cs > /dev/null 2>&1; then
+        INSTALLED+=("pwncat-cs")
+    elif pip3 install pwncat-cs --break-system-packages > /dev/null 2>&1; then
         INSTALLED+=("pwncat-cs")
     elif pip3 install pwncat-cs --break-system-packages --no-build-isolation > /dev/null 2>&1; then
         INSTALLED+=("pwncat-cs")
@@ -665,9 +669,9 @@ fi
 
 if [ "${INSTALL_CERTIPY:-true}" = "true" ]; then
     log "Installing certipy-ad..."
-    if pip3 install certipy-ad --break-system-packages > /dev/null 2>&1; then
+    if command -v pipx &>/dev/null && pipx install certipy-ad > /dev/null 2>&1; then
         INSTALLED+=("certipy-ad")
-    elif pip3 install certipy-ad --break-system-packages --no-build-isolation > /dev/null 2>&1; then
+    elif pip3 install certipy-ad --break-system-packages > /dev/null 2>&1; then
         INSTALLED+=("certipy-ad")
     elif pip3 install "git+https://github.com/ly4k/Certipy" --break-system-packages > /dev/null 2>&1; then
         INSTALLED+=("certipy-ad")
@@ -850,10 +854,12 @@ done
 
 if [ "${INSTALL_STEGOVERITAS:-true}" = "true" ]; then
     log "Installing stegoveritas..."
-    # Needs libmagic + image libs first
-    apt-get install -y libmagic1 python3-magic > /dev/null 2>&1 || true
-    if pip3 install stegoveritas --break-system-packages > /dev/null 2>&1; then
-        # Run the post-install dep script -- downloads extra tools
+    # Needs libmagic + image processing libs before install
+    apt-get install -y libmagic1 libmagic-dev python3-magic libjpeg-dev zlib1g-dev > /dev/null 2>&1 || true
+    if command -v pipx &>/dev/null && pipx install stegoveritas > /dev/null 2>&1; then
+        stegoveritas_install_deps > /dev/null 2>&1 || true
+        INSTALLED+=("stegoveritas")
+    elif pip3 install stegoveritas --break-system-packages > /dev/null 2>&1; then
         stegoveritas_install_deps > /dev/null 2>&1 || true
         INSTALLED+=("stegoveritas")
     else
