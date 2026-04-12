@@ -30,9 +30,22 @@ warn()    { printf '%s[!]%s %s\n' "$YELLOW" "$NC" "$1"; }
 err()     { printf '%s[-]%s %s\n' "$RED" "$NC" "$1"; }
 section() { printf '\n%s%s========== %s ==========%s\n\n' "$CYAN" "$BOLD" "$1" "$NC"; }
 
+DRY_RUN=false
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run) DRY_RUN=true ;;
+    esac
+done
+
 if [ "$EUID" -ne 0 ]; then
     err "Run as root: sudo bash install-toolkit.sh"
     exit 1
+fi
+
+if [ "$DRY_RUN" = true ]; then
+    warn "DRY RUN MODE — no packages will be downloaded or installed."
+    warn "The script will check if each package is available and mark it accordingly."
+    echo ""
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -115,6 +128,17 @@ safe_install() {
         SKIPPED+=("$pkg")
         return
     fi
+    if [ "$DRY_RUN" = true ]; then
+        log "[dry-run] Checking $pkg..."
+        if apt-cache show "$pkg" > /dev/null 2>&1; then
+            log "[dry-run] $pkg — available in repos"
+            INSTALLED+=("$pkg")
+        else
+            warn "[dry-run] $pkg — NOT found in repos"
+            FAILED+=("$pkg")
+        fi
+        return
+    fi
     log "Installing $pkg..."
     if apt-get install -y "$pkg" > /dev/null 2>&1; then
         INSTALLED+=("$pkg")
@@ -126,6 +150,17 @@ safe_install() {
 
 pip_install() {
     local pkg="$1"
+    if [ "$DRY_RUN" = true ]; then
+        log "[dry-run] Checking $pkg (pip)..."
+        if pip3 index versions "$pkg" > /dev/null 2>&1 || pip3 install "$pkg" --dry-run --break-system-packages > /dev/null 2>&1; then
+            log "[dry-run] $pkg — available on PyPI"
+            INSTALLED+=("$pkg")
+        else
+            warn "[dry-run] $pkg — NOT found on PyPI"
+            FAILED+=("$pkg")
+        fi
+        return
+    fi
     log "Installing $pkg (pip)..."
     if pip3 install "$pkg" --break-system-packages > /dev/null 2>&1; then
         INSTALLED+=("$pkg")
@@ -137,9 +172,66 @@ pip_install() {
     fi
 }
 
+# Dry-run helper: check if a URL is reachable (HEAD request)
+dry_check_url() {
+    local name="$1"
+    local url="$2"
+    if curl -sI --max-time 5 "$url" 2>/dev/null | head -1 | grep -q "200\|302\|301"; then
+        log "[dry-run] $name — URL reachable"
+        INSTALLED+=("$name")
+    else
+        warn "[dry-run] $name — URL not reachable: $url"
+        FAILED+=("$name")
+    fi
+}
+
+# Dry-run helper: check if a git repo is reachable
+dry_check_repo() {
+    local name="$1"
+    local url="$2"
+    if git ls-remote "$url" HEAD > /dev/null 2>&1; then
+        log "[dry-run] $name — repo reachable"
+        INSTALLED+=("$name")
+    else
+        warn "[dry-run] $name — repo NOT reachable: $url"
+        FAILED+=("$name")
+    fi
+}
+
+# Dry-run aware pipx install
+pipx_or_pip_install() {
+    local pkg="$1"
+    if [ "$DRY_RUN" = true ]; then
+        log "[dry-run] Checking $pkg (pipx/pip)..."
+        if pip3 install "$pkg" --dry-run --break-system-packages > /dev/null 2>&1; then
+            log "[dry-run] $pkg — available"
+            INSTALLED+=("$pkg")
+        else
+            warn "[dry-run] $pkg — NOT available"
+            FAILED+=("$pkg")
+        fi
+        return
+    fi
+    log "Installing $pkg..."
+    if command -v pipx &>/dev/null && pipx install "$pkg" > /dev/null 2>&1; then
+        INSTALLED+=("$pkg")
+    elif pip3 install "$pkg" --break-system-packages > /dev/null 2>&1; then
+        INSTALLED+=("$pkg")
+    elif pip3 install "$pkg" --break-system-packages --no-build-isolation > /dev/null 2>&1; then
+        INSTALLED+=("$pkg")
+    else
+        FAILED+=("$pkg")
+    fi
+}
+
 go_install() {
     local name="$1"
     local url="$2"
+    if [ "$DRY_RUN" = true ]; then
+        log "[dry-run] $name (go) — would install from $url"
+        INSTALLED+=("$name")
+        return
+    fi
     log "Installing $name (go)..."
     if command -v go &> /dev/null; then
         if go install "$url" > /dev/null 2>&1; then
@@ -157,8 +249,12 @@ go_install() {
 # =============================================================================
 section "UPDATING SYSTEM"
 # =============================================================================
-apt-get update -y
-apt-get upgrade -y
+if [ "$DRY_RUN" = true ]; then
+    log "[dry-run] Skipping apt update/upgrade"
+else
+    apt-get update -y
+    apt-get upgrade -y
+fi
 
 log "Installing base dependencies..."
 # Install packages individually so one missing package doesn't nuke the whole setup.
@@ -499,27 +595,28 @@ done
 
 if [ "${INSTALL_RUSTSCAN:-true}" = "true" ]; then
     if ! command -v rustscan &> /dev/null; then
-        log "Installing rustscan..."
-        # Try apt first (Parrot may have it)
-        if apt-get install -y rustscan > /dev/null 2>&1; then
-            INSTALLED+=("rustscan")
+        if [ "$DRY_RUN" = true ]; then
+            dry_check_url "rustscan" "https://github.com/RustScan/RustScan/releases/download/2.3.0/rustscan_2.3.0_amd64.deb"
         else
-            # Try GitHub API for latest .deb
-            RUSTSCAN_URL=$(curl -s --max-time 10 https://api.github.com/repos/RustScan/RustScan/releases/latest \
-                | jq -r '.assets[].browser_download_url' 2>/dev/null | grep "amd64.deb" | head -1)
-            # Fallback: hardcoded known-good version if API is rate-limited
-            [ -z "$RUSTSCAN_URL" ] || [ "$RUSTSCAN_URL" = "null" ] && \
-                RUSTSCAN_URL="https://github.com/RustScan/RustScan/releases/download/2.3.0/rustscan_2.3.0_amd64.deb"
-            wget -q -O /tmp/rustscan.deb "$RUSTSCAN_URL" 2>/dev/null
-            if dpkg -i /tmp/rustscan.deb > /dev/null 2>&1 || { apt-get install -f -y > /dev/null 2>&1 && dpkg -i /tmp/rustscan.deb > /dev/null 2>&1; }; then
+            log "Installing rustscan..."
+            if apt-get install -y rustscan > /dev/null 2>&1; then
                 INSTALLED+=("rustscan")
-            elif command -v cargo &>/dev/null; then
-                log "rustscan .deb failed, trying cargo install (slow but works)..."
-                cargo install rustscan > /dev/null 2>&1 && INSTALLED+=("rustscan") || FAILED+=("rustscan")
             else
-                FAILED+=("rustscan")
+                RUSTSCAN_URL=$(curl -s --max-time 10 https://api.github.com/repos/RustScan/RustScan/releases/latest \
+                    | jq -r '.assets[].browser_download_url' 2>/dev/null | grep "amd64.deb" | head -1)
+                [ -z "$RUSTSCAN_URL" ] || [ "$RUSTSCAN_URL" = "null" ] && \
+                    RUSTSCAN_URL="https://github.com/RustScan/RustScan/releases/download/2.3.0/rustscan_2.3.0_amd64.deb"
+                wget -q -O /tmp/rustscan.deb "$RUSTSCAN_URL" 2>/dev/null
+                if dpkg -i /tmp/rustscan.deb > /dev/null 2>&1 || { apt-get install -f -y > /dev/null 2>&1 && dpkg -i /tmp/rustscan.deb > /dev/null 2>&1; }; then
+                    INSTALLED+=("rustscan")
+                elif command -v cargo &>/dev/null; then
+                    log "rustscan .deb failed, trying cargo install (slow but works)..."
+                    cargo install rustscan > /dev/null 2>&1 && INSTALLED+=("rustscan") || FAILED+=("rustscan")
+                else
+                    FAILED+=("rustscan")
+                fi
+                rm -f /tmp/rustscan.deb
             fi
-            rm -f /tmp/rustscan.deb
         fi
     else
         SKIPPED+=("rustscan")
@@ -634,17 +731,20 @@ for pkg in "${EXPLOIT_PIP[@]}"; do
 done
 
 if [ "${INSTALL_NETEXEC:-true}" = "true" ]; then
-    log "Installing netexec (CrackMapExec successor)..."
-    # Try apt first -- it's in Debian repos
-    if apt-get install -y netexec > /dev/null 2>&1; then
-        INSTALLED+=("netexec")
-    elif pip3 install netexec --break-system-packages > /dev/null 2>&1; then
-        INSTALLED+=("netexec")
-    elif command -v pipx &>/dev/null || apt-get install -y pipx > /dev/null 2>&1; then
-        pipx install "git+https://github.com/Pennyw0rth/NetExec" > /dev/null 2>&1 \
-            && INSTALLED+=("netexec") || FAILED+=("netexec")
+    if [ "$DRY_RUN" = true ]; then
+        safe_install "netexec"
     else
-        FAILED+=("netexec")
+        log "Installing netexec (CrackMapExec successor)..."
+        if apt-get install -y netexec > /dev/null 2>&1; then
+            INSTALLED+=("netexec")
+        elif pip3 install netexec --break-system-packages > /dev/null 2>&1; then
+            INSTALLED+=("netexec")
+        elif command -v pipx &>/dev/null || apt-get install -y pipx > /dev/null 2>&1; then
+            pipx install "git+https://github.com/Pennyw0rth/NetExec" > /dev/null 2>&1 \
+                && INSTALLED+=("netexec") || FAILED+=("netexec")
+        else
+            FAILED+=("netexec")
+        fi
     fi
 fi
 
@@ -655,29 +755,11 @@ if ! command -v pipx &>/dev/null; then
 fi
 
 if [ "${INSTALL_PWNCAT:-true}" = "true" ]; then
-    log "Installing pwncat-cs..."
-    if command -v pipx &>/dev/null && pipx install pwncat-cs > /dev/null 2>&1; then
-        INSTALLED+=("pwncat-cs")
-    elif pip3 install pwncat-cs --break-system-packages > /dev/null 2>&1; then
-        INSTALLED+=("pwncat-cs")
-    elif pip3 install pwncat-cs --break-system-packages --no-build-isolation > /dev/null 2>&1; then
-        INSTALLED+=("pwncat-cs")
-    else
-        FAILED+=("pwncat-cs")
-    fi
+    pipx_or_pip_install "pwncat-cs"
 fi
 
 if [ "${INSTALL_CERTIPY:-true}" = "true" ]; then
-    log "Installing certipy-ad..."
-    if command -v pipx &>/dev/null && pipx install certipy-ad > /dev/null 2>&1; then
-        INSTALLED+=("certipy-ad")
-    elif pip3 install certipy-ad --break-system-packages > /dev/null 2>&1; then
-        INSTALLED+=("certipy-ad")
-    elif pip3 install "git+https://github.com/ly4k/Certipy" --break-system-packages > /dev/null 2>&1; then
-        INSTALLED+=("certipy-ad")
-    else
-        FAILED+=("certipy-ad")
-    fi
+    pipx_or_pip_install "certipy-ad"
 fi
 
 if [ "${INSTALL_IMPACKET:-true}" = "true" ]; then
@@ -853,17 +935,14 @@ for pkg in "${FORENSICS_PIP[@]}"; do
 done
 
 if [ "${INSTALL_STEGOVERITAS:-true}" = "true" ]; then
-    log "Installing stegoveritas..."
-    # Needs libmagic + image processing libs before install
-    apt-get install -y libmagic1 libmagic-dev python3-magic libjpeg-dev zlib1g-dev > /dev/null 2>&1 || true
-    if command -v pipx &>/dev/null && pipx install stegoveritas > /dev/null 2>&1; then
+    # Install build deps first (only in real mode)
+    if [ "$DRY_RUN" != true ]; then
+        apt-get install -y libmagic1 libmagic-dev python3-magic libjpeg-dev zlib1g-dev > /dev/null 2>&1 || true
+    fi
+    pipx_or_pip_install "stegoveritas"
+    # Post-install: download extra stego tools
+    if [ "$DRY_RUN" != true ] && command -v stegoveritas &>/dev/null; then
         stegoveritas_install_deps > /dev/null 2>&1 || true
-        INSTALLED+=("stegoveritas")
-    elif pip3 install stegoveritas --break-system-packages > /dev/null 2>&1; then
-        stegoveritas_install_deps > /dev/null 2>&1 || true
-        INSTALLED+=("stegoveritas")
-    else
-        FAILED+=("stegoveritas")
     fi
 fi
 

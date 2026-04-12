@@ -127,10 +127,23 @@ interactive() {
         log "Found .ovpn files:"
         echo ""
         for i in "${!found_files[@]}"; do
-            echo "  ${GREEN}[$((i+1))]${NC} ${found_files[$i]}"
+            local display_path="${found_files[$i]}"
+            local path_note=""
+            if [[ "$display_path" == /mnt/c/* ]]; then
+                path_note=" ${YELLOW}(Windows)${NC}"
+            fi
+            echo "  ${GREEN}[$((i+1))]${NC} ${display_path}${path_note}"
         done
         echo "  ${GREEN}[0]${NC} Enter a custom path"
         echo ""
+        # Tip if any file is on Windows filesystem
+        local has_mnt=false
+        for f in "${found_files[@]}"; do [[ "$f" == /mnt/c/* ]] && has_mnt=true; done
+        if [ "$has_mnt" = true ]; then
+            echo "  ${YELLOW}Tip:${NC} /mnt/c/ is your Windows C: drive mounted inside WSL."
+            echo "       For faster access, copy your .ovpn to: ${CYAN}~/workspace/htb/vpn/${NC}"
+            echo ""
+        fi
 
         read -rp "Select a file [1]: " choice
         choice="${choice:-1}"
